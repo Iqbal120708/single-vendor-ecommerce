@@ -164,6 +164,7 @@ REST_AUTH = {
     # "JWT_AUTH_SAMESITE": "Lax"
     # "JWT_AUTH_SECURE": True,
     "REGISTER_SERIALIZER": "accounts.serializers.CustomRegisterSerializer",
+    "USER_DETAILS_SERIALIZER": "accounts.serializers.CustomUserDetailsSerializer",
     "OLD_PASSWORD_FIELD_ENABLED": True,
 }
 
