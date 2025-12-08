@@ -42,4 +42,6 @@ urlpatterns = [
         name="password_reset_confirm",
     ),
     path("api/auth/registration/", include("dj_rest_auth.registration.urls")),
+    path("api/product/", include("product.urls")),
+    path("api/cart/", include("cart.urls")),
 ]

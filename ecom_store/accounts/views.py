@@ -6,12 +6,14 @@ from .log_utils import log_refresh_success, log_refresh_failure
 import jwt
 from rest_framework_simplejwt.settings import api_settings
 from rest_framework_simplejwt.exceptions import InvalidToken
+from rest_framework.permissions import AllowAny
 
 class CustomVerifyEmailAPIView(APIView):
     """
     Menerima key verifikasi email dari URL tanpa redirect (JSON response only).
     Hanya menerima POST.
     """
+    permission_classes = [AllowAny]
 
     http_method_names = ['post']
 

@@ -1,16 +1,19 @@
-from rest_framework.test import APITestCase
+#from rest_framework.test import APITestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from allauth.account.models import EmailAddress
 from unittest.mock import patch
+from django.test import TransactionTestCase
+from rest_framework.test import APIClient
 
 User = get_user_model()
 
 
-class UserDetailTest(APITestCase):
-    #reset_sequences = True
+class UserDetailTest(TransactionTestCase):
+    reset_sequences = True
     
     def setUp(self):
+        self.client = APIClient()
         self.user = User.objects.create_user(
             username="test",
             email="test@gmail.com",
