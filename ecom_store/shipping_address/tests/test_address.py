@@ -1,52 +1,55 @@
 from unittest.mock import patch
-from rest_framework.test import APITestCase
+#from rest_framework.test import APITestCase
 from allauth.account.models import EmailAddress
 from django.contrib.auth import get_user_model
 from django.db import connection
-#from django.test import TransactionTestCase
+from django.test import TransactionTestCase
 from django.urls import reverse
 #from freezegun import freeze_time
-#from rest_framework.test import APIClient
+from rest_framework.test import APIClient
 
 from shipping_address.models import Province, City, District, SubDistrict
 
 User = get_user_model()
 
-class TestAddress(APITestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.user = User.objects.create_user(
+class TestAddress(TransactionTestCase):
+    reset_sequences = True
+
+    def setUp(self):
+        self.client = APIClient()
+
+        self.user = User.objects.create_user(
             username="test",
             email="test@gmail.com",
             password="test2938484jr",
             phone_number="089384442947",
         )
         EmailAddress.objects.create(
-            user=cls.user, email=cls.user.email, verified=True, primary=True
+            user=self.user, email=self.user.email, verified=True, primary=True
         )
         
-        cls.province = Province.objects.create(
+        self.province = Province.objects.create(
             ro_id=1,
             name='NUSA TENGGARA BARAT (NTB)'
         )
         
-        cls.city = City.objects.create(
+        self.city = City.objects.create(
             ro_id=1,
             name='MATARAM',
-            province=cls.province
+            province=self.province
         )
         
-        cls.district = District.objects.create(
+        self.district = District.objects.create(
             ro_id=1,
             name='MATARAM',
-            city=cls.city
+            city=self.city
         )
         
-        cls.subdistrict = SubDistrict.objects.create(
+        self.subdistrict = SubDistrict.objects.create(
             ro_id=1,
             name='MATARAM',
             zip_code='12455',
-            district=cls.district
+            district=self.district
         )
 
     def handle_login(self):

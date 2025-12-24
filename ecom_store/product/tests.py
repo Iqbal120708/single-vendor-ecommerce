@@ -5,17 +5,19 @@ from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.urls import reverse
 from freezegun import freeze_time
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient
+from django.test import TransactionTestCase
 
 User = get_user_model()
 
 
 @freeze_time("2025-12-08T11:45:00+07:00")
-class ProductTest(APITestCase):
-    # reset_sequences = True
+class ProductTest(TransactionTestCase):
+    reset_sequences = True
 
-    @classmethod
-    def setUpTestData(self):
+    def setUp(self):
+        self.client = APIClient()
+        
         call_command("seed_product")
 
         self.user = User.objects.create_user(

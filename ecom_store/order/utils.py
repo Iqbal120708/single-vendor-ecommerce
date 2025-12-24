@@ -1,30 +1,22 @@
 import requests
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.utils.timezone import now
+from django.utils.timezone import localtime
 from .models import Courier
-from shipping_address.utils import format_address
+#from shipping_address.utils import format_address
 from store.models import Store
 from rest_framework import serializers
 import logging
+from .models import Order, OrderItem
 
 logger = logging.getLogger("order")
 logger_error = logging.getLogger("order_error")
 
 def fetch_shipping_rates_from_rajaongkir(payload):
-    # parameter user for logging error
-    
-    #couriers = Courier.objects.filter(is_active=True)
     headers = {"key": settings.API_KEY_RAJA_ONGKIR}
-    # payload = {
-    #     "origin": origin_id,
-    #     "destination": destination_id,
-    #     "weight": total_weight,
-    # }
-
+    
     results = []
-    # for courier in couriers:
-    # payload["courier"] = courier.code
+
     res = requests.post(
         "https://rajaongkir.komerce.id/api/v1/calculate/district/domestic-cost", data=payload, headers=headers
     )
@@ -47,14 +39,7 @@ def fetch_shipping_rates_from_rajaongkir(payload):
     return results
 
 
-def get_origin_and_destination(user, shipping_address_id=None):
-    store = Store.objects.filter(is_active=True).first()
-    if not store:
-        logger_error.error(f"Store aktif tidak ditemukan. User ID: {user.id}")
-        raise serializers.ValidationError({"error": "Toko tidak ditemukan."})
-        
-    origin = store.shipping_address
-    
+def get_destination(user, shipping_address_id=None):
     if shipping_address_id:
         destination = user.shippingaddress_set.filter(id=shipping_address_id).first()
     else:
@@ -67,7 +52,7 @@ def get_origin_and_destination(user, shipping_address_id=None):
         raise serializers.ValidationError({"error": "Alamat pengiriman belum dipilih. Silakan pilih salah satu alamat Anda atau atur salah satu sebagai 'Alamat Utama' (Default)."
         })
     
-    return origin, destination
+    return destination
     
 def create_order_details(carts):
     order_details = []
@@ -89,69 +74,78 @@ def create_order_details(carts):
         
     return order_details
     
-    
-def calculate_insurance_value(order_details, admin_fee=2000):
-    """
-    Menghitung premi asuransi pengiriman.
-    Default rate: 0.2% (0.002)
-    Default admin: Rp 2.000
-    """
-    total_item_value = sum(item['subtotal'] for item in order_details)
-    
-    if total_item_value <= 0:
-        return 0.0
-    
-    insurance_rate = 0.002 
-    premium = (total_item_value * insurance_rate) + admin_fee
-    
-    return round(float(premium), 2)
 
-# belum selesai
-def create_order_rajaongkir(user, order_details, shipping_context, shipping_option):
-    store = Store.objects.filter(is_active=True).first()
+def create_order(user, shipping_context, shipping_option, store, order_details, payment_method="BANK TRANSFER"):
     
-    headers = {"key": settings.API_KEY_RAJA_ONGKIR}
-    
-    items_total = sum(item["subtotal"] for item in order_details)
     shipping_cost = shipping_option["cost"]
-    insurance_cost = calculate_insurance_value(order_details)
+    shipping_cashback = 0
+    #insurance_value = calculate_insurance_value(order_details)
     service_fee = 0
     additional_cost = 0
-    shipping_cashback = 0
     
-    grand_total = (
-        items_total
-        + shipping_cost
-        - shipping_cashback
-        + insurance_cost
+    order = Order.objects.create(
+        user=user,
+        store=store,
+        shipping_cost=shipping_cost,
+        shipping_cashback=shipping_cashback,
+        courier_code=shipping_option["code"],
+        shipping_type=shipping_option["service"],
+        payment_method=payment_method,
+        service_fee=service_fee,
+        additional_cost=additional_cost,
+        #insurance_value=insurance_value,
+        origin_ro=shipping_context["origin_id"],
+        origin_address=shipping_context["origin"].formatted_address,
+        destination_ro=shipping_context["destination_id"],
+        destination_address=shipping_context["destination"].formatted_address,
     )
     
+    return order
+    
+def create_order_item(order, order_details):
+    results = []
+    for item in order_details:
+        order_item = OrderItem.objects.create(
+            order=order,
+            product_name=item["product_name"],
+            product_variant_name=item["product_variant_name"],
+            product_weight=item["product_weight"],
+            product_price=item["product_price"],
+            qty=item["qty"]
+        )
+        results.append(order_item)
+    return results
+        
+# belum selesai
+def create_order_rajaongkir(order, order_details):
+    
+    headers = {"key": settings.API_KEY_RAJA_ONGKIR}
 
     order_data = {
-        "order_date": str(now().date()),
-        "brand_name": store.brand_name,
-        "shipper_name": store.name,
-        "shipper_phone": store.phone_number,
-        "shipper_destination_id": shipping_context["origin_id"],
-        "shipper_address": format_address(shipping_context["origin"]),
-        #"origin_pin_point": "-7.274631, 109.207174",
-        "receiver_name": user.username,
-        "receiver_phone": user.phone_number,
-        "receiver_destination_id": shipping_context["destination_id"],
-        "receiver_address": format_address(shipping_context["destination"]),
-        "shipper_email": store.email,
-        #"destination_pin_point": "-7.274631, 109.207174",
-        "shipping": shipping_option["code"],
-        "shipping_type": shipping_option["service"],
-        "payment_method": "BANK TRANSFER",
-        "shipping_cost": shipping_cost,
-        "shipping_cashback": shipping_cashback,
-        "service_fee": service_fee,
-        "additional_cost": additional_cost,
-        "grand_total": int(items_total),
-        "cod_value": 0,
-        "insurance_value": insurance_cost,
+        "order_date": str(localtime(order.created_at).date()),
+        "brand_name": order.store.brand_name,
+        "shipper_name": order.store.name,
+        "shipper_phone": order.store.clean_phone_number,
+        "shipper_destination_id": order.origin_ro,
+        "shipper_address": order.origin_address,
+        "receiver_name": order.user.username,
+        "receiver_phone": order.user.clean_phone_number,
+        "receiver_destination_id": order.destination_ro,
+        "receiver_address": order.destination_address,
+        "shipper_email": order.store.email,
+        "shipping": order.courier_code,
+        "shipping_type": order.shipping_type,
+        "payment_method": order.payment_method,
+        "shipping_cost": order.shipping_cost,
+        "shipping_cashback": order.shipping_cashback,
+        "service_fee": order.service_fee,
+        "additional_cost": order.additional_cost,
+        "grand_total": order.grand_total,
+        "cod_value": order.cod_value,
+        "insurance_value": order.insurance_value,
         "order_details": order_details
+        #"origin_pin_point": "-7.274631, 109.207174",
+        #"destination_pin_point": "-7.274631, 109.207174",
     }
     
     res = requests.post(

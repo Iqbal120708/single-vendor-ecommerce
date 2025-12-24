@@ -57,6 +57,23 @@ class ShippingAddress(BaseModel):
         if errors:
             raise ValidationError(errors)
 
+    @property
+    def formatted_address(self):
+        street = self.street_address
+        kecamatan = self.subdistrict.name
+        kota_kab = self.city.name
+        kode_pos = self.subdistrict.zip_code
+    
+        address_parts = [
+            street,
+            f"Kec. {kecamatan}",
+            kota_kab,
+            kode_pos
+        ]
+        
+        # Filter jika ada data yang None/Kosong agar tidak muncul koma berlebih
+        return ", ".join([str(p) for p in address_parts if p])
+        
     class Meta:
         # unique_together = (
         #     "province",

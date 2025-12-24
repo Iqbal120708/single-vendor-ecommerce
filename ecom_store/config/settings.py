@@ -272,3 +272,7 @@ LOGGING = {
 }
 
 API_KEY_RAJA_ONGKIR = os.environ.get("API_KEY_RAJA_ONGKIR")
+
+MIDTRANS_SERVER_KEY = os.environ.get("MIDTRANS_SERVER_KEY")
+MIDTRANS_CLIENT_KEY = os.environ.get("MIDTRANS_CLIENT_KEY")
+MIDTRANS_IS_PRODUCTION = True if os.environ.get("MIDTRANS_IS_PRODUCTION") == "True" else False

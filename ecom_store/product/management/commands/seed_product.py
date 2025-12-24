@@ -20,6 +20,7 @@ class Command(BaseCommand):
 
         for i in range(1, 11):
             Product.objects.create(
+                variant_name=f"Variant Sample Product {i}",
                 name=f"Sample Product {i}",
                 price=random.randint(10000, 200000),
                 category=category,

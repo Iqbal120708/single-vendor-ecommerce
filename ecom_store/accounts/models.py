@@ -19,6 +19,12 @@ class CustomUser(AbstractUser):
     #     related_name="users",
     #     blank=True
     # )
+    
+    @property
+    def clean_phone_number(self):
+        if self.phone_number:
+            return str(self.phone_number).replace('+', '')
+        return ""
 
     def delete(self, *args, **kwargs):
         if not self.pending_delete:

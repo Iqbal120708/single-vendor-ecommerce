@@ -7,9 +7,10 @@ from django.core.cache import cache
 from .serializers import ShippingSerializer
 from .models import Courier
 import uuid
-from .utils import fetch_shipping_rates_from_rajaongkir, get_origin_and_destination, create_order_details, create_order_rajaongkir
+from .utils import fetch_shipping_rates_from_rajaongkir, get_destination, create_order_details, create_order_rajaongkir, create_order, create_order_item
 import logging
-
+from config.midtrans import snap
+from store.models import Store
 logger = logging.getLogger("order")
 logger_error = logging.getLogger("order_error")
 
@@ -39,17 +40,24 @@ class CheckoutView(APIView):
             )
             .select_related("product")
         )
+        
+        store = Store.objects.filter(is_active=True).first()
+        if not store:
+            logger_error.error(f"Store aktif tidak ditemukan. User ID: {request.user.id}")
+            return Response({"error": "Toko tidak ditemukan."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        origin = store.shipping_address
 
         shipping_address_id = request.data.get("shipping_address_id")
-        origin, destination = get_origin_and_destination(
+        destination = get_destination(
             request.user, shipping_address_id
         )
         total_weight = sum([cart.product.weight*cart.qty for cart in carts])
         couriers = Courier.objects.filter(is_active=True).values_list("code", flat=True)
         
         payload = {
-            "origin": origin.city.ro_id,
-            "destination": destination.city.ro_id,
+            "origin": origin.district.ro_id,
+            "destination": destination.district.ro_id,
             "weight": total_weight,
             "courier": ":".join(list(couriers))
         }
@@ -73,27 +81,83 @@ class CheckoutView(APIView):
         }
         order_details = create_order_details(carts)
         # simpan payload di cache (misal 10 menit)
-        cache.set(cache_key, [shipping_context, order_details], 600)
+        cache.set(cache_key, [shipping_context, order_details, store.id], 600)
         logger.info(f"Checkout ID {checkout_id} dibuat untuk User {request.user.id}. Data disimpan di cache.")
         return Response({
             "checkout_id": checkout_id,
             "shipping_options": shipping_options
         })
 
-class ShippingView(APIView):
+class TransactionView(APIView):
     def post(self, request):
         serializer = ShippingSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
         checkout_id = serializer.data["checkout_id"]
-        shipping_context, order_details = cache.get(f"shipping_payload_{request.user.id}_{checkout_id}")
+        cache_data = cache.get(f"shipping_payload_{request.user.id}_{checkout_id}")
         
-        # bikin validasi kalo data cache lebih 10 menit
+        if not cache_data:
+            return Response(
+                {"error": "Sesi telah berakhir atau tidak ditemukan. Silakan ulangi proses (Maks. 10 menit)."}, 
+                status=status.HTTP_408_REQUEST_TIMEOUT
+            )
+            
+        shipping_context, order_details, store_id = cache_data
         
-        ###
+        store = Store.objects.get(id=store_id)
+        # shipping_option = serializer.data
+        order = create_order(request.user, shipping_context, serializer.data, store, order_details)
+        order_item = create_order_item(order, order_details)
         
+        item_details = []
+
+        # Produk
+        for item in order_item:
+            item_details.append({
+                "id": item.product_name,
+                "price": int(item.product_price),
+                "quantity": item.qty,
+                "name": item.product_name
+            })
         
+        # Ongkir
+        item_details.append({
+            "id": "SHIPPING",
+            "price": order.shipping_cost,
+            "quantity": 1,
+            "name": f'Ongkir {order.courier_code} {order.shipping_type}'
+        })
         
+        if order.insurance_value > 0:
+            item_details.append({
+                "id": "INSURANCE",
+                "price": int(order.insurance_value),
+                "quantity": 1,
+                "name": "Asuransi Pengiriman"
+            })
         
+        gross_amount = sum(
+            item["price"] * item["quantity"]
+            for item in item_details
+        )
+        
+        transaction = {
+            "transaction_details": {
+                "order_id": str(order.order_id),
+                "gross_amount": gross_amount
+            },
+            "item_details": item_details,
+            "customer_details": {
+                "first_name": request.user.username,
+                "email": request.user.email,
+                "phone": str(request.user.phone_number)
+            }
+        }
+        
+        snap_token = snap.create_transaction(transaction)["token"]
+        
+        return Response({
+            "snap_token": snap_token
+        })
         
         
