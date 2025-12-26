@@ -33,6 +33,11 @@ cd single-vendor-ecommerce
 pip install -r requirements.txt
 ```
 - add your database configuration in `settings.py` or in variable virtual enviroment
+- migrate the model
+```
+python manage.py makemigrations
+python manage.py migrate
+```
 - activate the server
 ```
 cd ecom_store
