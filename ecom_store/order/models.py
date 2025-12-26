@@ -71,13 +71,16 @@ class Order(BaseModel):
     additional_cost = models.PositiveIntegerField(default=0)
     cod_value = models.PositiveIntegerField(null=True, blank=True)
 
-    insurance_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    #insurance_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     origin_ro = models.IntegerField()
     origin_address = models.TextField()
 
     destination_ro = models.IntegerField()
     destination_address = models.TextField()
+    
+    order_id_ro = models.CharField(max_length=20, null=True, blank=True)
+    order_no_ro = models.CharField(max_length=50, null=True, blank=True)
 
     @property
     def grand_total(self):
@@ -133,14 +136,9 @@ class Order(BaseModel):
 
 class OrderItem(BaseModel):
     id = models.BigAutoField(primary_key=True)
-
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
-
-    product_name = models.CharField(max_length=255)
-    product_variant_name = models.CharField(max_length=255)
-    product_weight = models.PositiveIntegerField()
+    product = models.ForeignKey("product.Product", on_delete=models.PROTECT)
     product_price = models.DecimalField(max_digits=18, decimal_places=2)
-
     qty = models.PositiveIntegerField()
 
     @property
@@ -149,3 +147,11 @@ class OrderItem(BaseModel):
 
     def __str__(self):
         return f"{self.product} x {self.qty}"
+
+class CheckoutSession(BaseModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    cart_ids = models.JSONField()
+    destination = models.ForeignKey("shipping_address.ShippingAddress", on_delete=models.PROTECT)
+    store = models.ForeignKey("store.Store", on_delete=models.PROTECT)
+    expires_at = models.DateTimeField()

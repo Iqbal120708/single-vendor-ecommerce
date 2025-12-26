@@ -49,4 +49,22 @@ class JSONFormatter(logging.Formatter):
                 }
             )
 
+        elif event_type == "transaction":
+            log_record["order_id"] = getattr(record, "order_id", None)
+            
+            if hasattr(record, "payload"):
+                log_record["payload"] = record.payload
+            
+            if hasattr(record, "status_code"):
+                log_record["status_code"] = record.status_code
+            
+            if hasattr(record, "transaction_status"):
+                log_record["transaction_status"] = record.transaction_status
+                
+            if hasattr(record, "response"):
+                log_record["response"] = record.response
+            
+            if hasattr(record, "checkout_id"):
+                log_record["checkout_id"] = record.checkout_id
+            
         return json.dumps(log_record)

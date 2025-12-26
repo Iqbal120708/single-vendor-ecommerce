@@ -33,7 +33,10 @@ SECRET_KEY = os.environ.get("SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True if os.environ.get("DEBUG") == "True" else False
 
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
+#ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
+ALLOWED_HOSTS = [
+    "algorithms-difficulty-diane-issues.trycloudflare.com"
+]
 
 AUTH_USER_MODEL = "accounts.CustomUser"
 
@@ -62,9 +65,11 @@ INSTALLED_APPS = [
     "cart",
     "order",
     "store",
+   # "corsheaders",
 ]
 
 MIDDLEWARE = [
+    #"corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -273,7 +278,8 @@ LOGGING = {
     },
 }
 
-API_KEY_RAJA_ONGKIR = os.environ.get("API_KEY_RAJA_ONGKIR")
+API_KEY_RAJA_ONGKIR_SHIPPING_COST = os.environ.get("API_KEY_RAJA_ONGKIR_SHIPPING_COST")
+API_KEY_RAJA_ONGKIR_SHIPPING_DELIVERY = os.environ.get("API_KEY_RAJA_ONGKIR_SHIPPING_DELIVERY")
 
 MIDTRANS_SERVER_KEY = os.environ.get("MIDTRANS_SERVER_KEY")
 MIDTRANS_CLIENT_KEY = os.environ.get("MIDTRANS_CLIENT_KEY")

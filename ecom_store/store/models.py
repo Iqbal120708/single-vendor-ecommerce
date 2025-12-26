@@ -15,6 +15,12 @@ class Store(BaseModel):
     shipping_address = models.ForeignKey(ShippingAddress, on_delete=models.PROTECT)
     is_active = models.BooleanField(default=True)
 
+    @property
+    def clean_phone_number(self):
+        if self.phone_number:
+            return str(self.phone_number).replace("+", "")
+        return ""
+        
     def clean(self):
         if not self.shipping_address.user.is_superuser:
             raise ValidationError(

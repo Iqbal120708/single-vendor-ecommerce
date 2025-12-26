@@ -9,24 +9,23 @@ from django.core.management import call_command
 from django.test import override_settings
 from django.urls import reverse
 from freezegun import freeze_time
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient
 
 from order.models import Order
 from store.models import Store
 
 # from store.models import Store
 # from shipping_address.models import Province, City, District, SubDistrict, ShippingAddress
-# from django.test import TransactionTestCase
+from django.test import TransactionTestCase
 
 User = get_user_model()
 
 
 @freeze_time("2025-12-08T11:45:00+07:00")
-class TransactionTest(APITestCase):
-    # reset_sequences = True
-    @classmethod
-    def setUpTestData(self):
-
+class TransactionTest(TransactionTestCase):
+    reset_sequences = True
+    def setUp(self):
+        self.client = APIClient()
         call_command("seed_product")
         call_command("seed_couriers")
         call_command("data_test_user")
@@ -154,15 +153,14 @@ class TransactionTest(APITestCase):
         # 7. Test OrderItem
         self.assertEqual(len(order.items.all()), 1)
         orderitem = order.items.first()
-        self.assertEqual(orderitem.product_name, "Sample Product 1")
-        self.assertEqual(orderitem.product_variant_name, "Variant Sample Product 1")
-        self.assertNotEqual(orderitem.product_weight, 0)
+        self.assertEqual(orderitem.product.id, 1)
         self.assertNotEqual(int(orderitem.product_price), 0)
         self.assertTrue(isinstance(orderitem.product_price, Decimal))
         self.assertEqual(orderitem.qty, 3)
         self.assertNotEqual(orderitem.subtotal, 0)
         # pastikan lebih besar dari harga product karena nilai dikali quantity (qty)
         self.assertGreater(orderitem.subtotal, orderitem.product_price)
+        
 
     @patch("accounts.signals.logger")
     @patch("order.views.logger")

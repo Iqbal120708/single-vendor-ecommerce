@@ -11,6 +11,10 @@ from rest_framework.test import APIClient
 from shipping_address.models import (City, District, Province, ShippingAddress,
                                      SubDistrict)
 from store.models import Store
+from order.models import CheckoutSession
+import uuid
+from datetime import datetime
+from django.utils import timezone
 
 User = get_user_model()
 
@@ -46,15 +50,30 @@ def res_test_success(self, res):
 
     self.assertIn("tiki", codes)
     self.assertIn("jne", codes)
-    self.assertIn("pos", codes)
     self.assertIn("ninja", codes)
+    self.assertIn("pos", codes)
     self.assertIn("jnt", codes)
     self.assertNotIn("sicepat", codes)
     self.assertNotIn("ide", codes)
 
     # 7. Memastikan harga/cost masuk akal (tidak negatif)
     self.assertTrue(all(option["cost"] >= 0 for option in data["shipping_options"]))
-
+    
+    # 8. Test CheckoutSession
+    checkout_sessions = CheckoutSession.objects.all()
+    self.assertEqual(len(checkout_sessions),1)
+    
+    checkout_session = checkout_sessions.first()
+    self.assertTrue(isinstance(checkout_session.id, uuid.UUID))
+    self.assertEqual(checkout_session.cart_ids, [1])
+    self.assertEqual(checkout_session.user.email, "test@gmail.com")
+    self.assertEqual(len(checkout_session.user.shippingaddress_set.all()), 1)
+    self.assertEqual(checkout_session.destination, checkout_session.user.shippingaddress_set.first())
+    self.assertEqual(checkout_session.store.email, "store@gmail.com")
+    
+    # value di tambah 10 menit dari menit 45 jadi 55
+    # value di convert dari lokal ke utc (jam 11 > jam 4)
+    self.assertEqual(checkout_session.expires_at.strftime("%Y-%m-%d %H:%M:%S"), "2025-12-08 04:55:00")
 
 @freeze_time("2025-12-08T11:45:00+07:00")
 class CheckoutTest(TransactionTestCase):
@@ -195,7 +214,7 @@ class CheckoutTest(TransactionTestCase):
         self.assertEqual(logs[0].args[0], "User 1 memulai checkout untuk cart_ids: [1]")
         self.assertEqual(
             logs[1].args[0],
-            f"Checkout ID {res.data['checkout_id']} dibuat untuk User 1. Data disimpan di cache.",
+            f"Checkout Session {res.data['checkout_id']} dibuat untuk User 1. Data disimpan di model.",
         )
 
     @patch("accounts.signals.logger")
@@ -245,7 +264,7 @@ class CheckoutTest(TransactionTestCase):
         self.assertEqual(logs[0].args[0], "User 1 memulai checkout untuk cart_ids: [1]")
         self.assertEqual(
             logs[1].args[0],
-            f"Checkout ID {res.data['checkout_id']} dibuat untuk User 1. Data disimpan di cache.",
+            f"Checkout Session {res.data['checkout_id']} dibuat untuk User 1. Data disimpan di model.",
         )
 
     @patch("accounts.signals.logger")

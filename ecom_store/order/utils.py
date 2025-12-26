@@ -16,7 +16,7 @@ logger_error = logging.getLogger("order_error")
 
 
 def fetch_shipping_rates_from_rajaongkir(payload):
-    headers = {"key": settings.API_KEY_RAJA_ONGKIR}
+    headers = {"key": settings.API_KEY_RAJA_ONGKIR_SHIPPING_COST}
 
     results = []
 
@@ -25,7 +25,7 @@ def fetch_shipping_rates_from_rajaongkir(payload):
         data=payload,
         headers=headers,
     )
-
+    
     data = res.json()
     if res.status_code == 200:
         for item in data["data"]:
@@ -63,84 +63,78 @@ def get_destination(user, shipping_address_id=None):
     return destination
 
 
-def create_order_details(carts):
+def create_order_details(order_items):
     order_details = []
 
-    for cart in carts:
-        product = cart.product
+    for item in order_items:
+        product = item.product
 
         order_details.append(
             {
                 "product_name": product.name,
                 "product_variant_name": product.variant_name,
-                "product_price": product.price,
+                "product_price": int(product.price),
                 "product_weight": product.weight,
                 "product_width": product.width,
                 "product_height": product.height,
                 "product_length": product.length,
-                "qty": cart.qty,
-                "subtotal": product.price * cart.qty,
+                "qty": item.qty,
+                "subtotal": int(item.product_price) * item.qty,
             }
         )
-
+            
     return order_details
 
 
 def create_order(
-    user,
-    shipping_context,
-    shipping_option,
-    store,
-    order_details,
+    checkout,
+    serializer_data,
     payment_method="BANK TRANSFER",
 ):
 
-    shipping_cost = shipping_option["cost"]
+    shipping_cost = serializer_data["cost"]
     shipping_cashback = 0
     # insurance_value = calculate_insurance_value(order_details)
     service_fee = 0
     additional_cost = 0
 
     order = Order.objects.create(
-        user=user,
-        store=store,
+        user=checkout.user,
+        store=checkout.store,
         shipping_cost=shipping_cost,
         shipping_cashback=shipping_cashback,
-        courier_code=shipping_option["code"],
-        shipping_type=shipping_option["service"],
+        courier_code=serializer_data["code"],
+        shipping_type=serializer_data["service"],
         payment_method=payment_method,
         service_fee=service_fee,
         additional_cost=additional_cost,
         # insurance_value=insurance_value,
-        origin_ro=shipping_context["origin_id"],
-        origin_address=shipping_context["origin"].formatted_address,
-        destination_ro=shipping_context["destination_id"],
-        destination_address=shipping_context["destination"].formatted_address,
+        origin_ro=checkout.store.shipping_address.district.ro_id,
+        origin_address=checkout.store.shipping_address.formatted_address,
+        destination_ro=checkout.destination.district.ro_id,
+        destination_address=checkout.destination.formatted_address,
     )
 
     return order
 
 
-def create_order_item(order, order_details):
+def create_order_item(order, carts):
     results = []
-    for item in order_details:
+    for cart in carts:
         order_item = OrderItem.objects.create(
             order=order,
-            product_name=item["product_name"],
-            product_variant_name=item["product_variant_name"],
-            product_weight=item["product_weight"],
-            product_price=item["product_price"],
-            qty=item["qty"],
+            product=cart.product,
+            product_price=cart.product.price,
+            qty=cart.qty,
         )
         results.append(order_item)
     return results
 
 
 # belum selesai
-def create_order_rajaongkir(order, order_details):
-
-    headers = {"key": settings.API_KEY_RAJA_ONGKIR}
-
+def fetch_order_rajaongkir(order):
+    order_details = create_order_details(order.items.all())
+    
     order_data = {
         "order_date": str(localtime(order.created_at).date()),
         "brand_name": order.store.brand_name,
@@ -167,9 +161,43 @@ def create_order_rajaongkir(order, order_details):
         # "origin_pin_point": "-7.274631, 109.207174",
         # "destination_pin_point": "-7.274631, 109.207174",
     }
-
+    
+    headers = {"x-api-key": settings.API_KEY_RAJA_ONGKIR_SHIPPING_DELIVERY}
     res = requests.post(
         "https://api-sandbox.collaborator.komerce.id/order/api/v1/orders/store",
-        data=order_data,
+        json=order_data,
         headers=headers,
     )
+
+    return res
+    
+# def change_payment_status_order(order, transaction_status):
+#     if transaction_status in ["settlement", "capture"]:
+#         if fraud_status == "accept": 
+#             order.payment_status = "paid"
+#     elif transaction_status in ["deny", "cancel", "expire"]:
+#         order.payment_status = "failed"
+#     elif transaction_status == "refund":
+#         order.payment_status = "refunded"
+        
+#     return order.payment_status
+        
+def reduce_product_stock(order_items):
+    product_ids = order_items.values_list("product_id", flat=True)
+
+    products = (
+        Product.objects
+        .select_for_update()
+        .filter(id__in=product_ids)
+    )
+
+    product_map = {p.id: p for p in products}
+
+    for item in order_items:
+        product = product_map[item.product_id]
+
+        if product.stock < item.qty:
+            raise ValueError("Stok tidak mencukupi")
+
+        product.stock -= item.qty
+        product.save()
