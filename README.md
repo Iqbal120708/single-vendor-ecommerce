@@ -35,11 +35,11 @@ pip install -r requirements.txt
 - add your database configuration in `settings.py` or in variable virtual enviroment
 - migrate the model
 ```
+cd ecom_store
 python manage.py makemigrations
 python manage.py migrate
 ```
 - activate the server
 ```
-cd ecom_store
 python manage.py runserver
 ```
