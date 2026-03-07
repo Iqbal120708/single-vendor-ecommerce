@@ -26,6 +26,7 @@ Single Vendor E-Commerce API project about admin who manages the product and ord
 https://github.com/Iqbal120708/single-vendor-ecommerce/
 cd single-vendor-ecommerce
 ```
+- create logs directory
 - create and activate a virtual environment
 - add virtual environment variables. open the script `settings.py` to know what the variables are 
 - install python libraries and frameworks
