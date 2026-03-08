@@ -95,7 +95,6 @@ class WebhookMidtrans:
             raise
     
         if self.res.status_code != 201:
-            print(self.res.text)
             logger_error.error(
                 "RajaOngkir order creation failed",
                 extra={

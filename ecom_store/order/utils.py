@@ -168,7 +168,6 @@ def fetch_order_rajaongkir(order):
         json=order_data,
         headers=headers,
     )
-
     return res
     
 # def change_payment_status_order(order, transaction_status):

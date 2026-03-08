@@ -33,10 +33,7 @@ SECRET_KEY = os.environ.get("SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True if os.environ.get("DEBUG") == "True" else False
 
-#ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
-ALLOWED_HOSTS = [
-    "algorithms-difficulty-diane-issues.trycloudflare.com"
-]
+ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
 
 AUTH_USER_MODEL = "accounts.CustomUser"
 
@@ -65,6 +62,7 @@ INSTALLED_APPS = [
     "cart",
     "order",
     "store",
+    "comment",
    # "corsheaders",
 ]
 
@@ -283,6 +281,4 @@ API_KEY_RAJA_ONGKIR_SHIPPING_DELIVERY = os.environ.get("API_KEY_RAJA_ONGKIR_SHIP
 
 MIDTRANS_SERVER_KEY = os.environ.get("MIDTRANS_SERVER_KEY")
 MIDTRANS_CLIENT_KEY = os.environ.get("MIDTRANS_CLIENT_KEY")
-MIDTRANS_IS_PRODUCTION = (
-    True if os.environ.get("MIDTRANS_IS_PRODUCTION") == "True" else False
-)
+MIDTRANS_IS_PRODUCTION = os.environ.get("MIDTRANS_IS_PRODUCTION") == "True"

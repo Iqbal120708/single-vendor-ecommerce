@@ -78,6 +78,14 @@ class TransactionTest(TransactionTestCase):
         order_log_view,
         mock_logger,
     ):
+        """
+        Not Finished Yet
+        
+        Masalah : Error 422 status code
+        Message : Insufficent Balance / Saldo Tidak Cukup
+        
+        Gak tau cara isi saldo RajaOngkir sandbox nya
+        """
         self.handle_login()
         # add cart
         res_add = self.client.post(reverse("add_to_cart", args=[1]), data={})

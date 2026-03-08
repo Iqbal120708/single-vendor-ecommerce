@@ -439,7 +439,7 @@ class CheckoutTest(TransactionTestCase):
     @patch("order.views.logger_error")
     @patch("order.utils.logger")
     @patch("order.utils.logger_error")
-    @override_settings(API_KEY_RAJA_ONGKIR="invalid key")
+    @override_settings(API_KEY_RAJA_ONGKIR_SHIPPING_COST="invalid key")
     def test_error_api_key(
         self,
         order_logger_error_util,
