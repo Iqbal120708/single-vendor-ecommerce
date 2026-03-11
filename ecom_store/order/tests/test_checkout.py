@@ -1,3 +1,5 @@
+import uuid
+from datetime import datetime
 from unittest.mock import patch
 
 from allauth.account.models import EmailAddress
@@ -5,16 +7,14 @@ from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TransactionTestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 from freezegun import freeze_time
 from rest_framework.test import APIClient
 
+from order.models import CheckoutSession
 from shipping_address.models import (City, District, Province, ShippingAddress,
                                      SubDistrict)
 from store.models import Store
-from order.models import CheckoutSession
-import uuid
-from datetime import datetime
-from django.utils import timezone
 
 User = get_user_model()
 
@@ -58,22 +58,27 @@ def res_test_success(self, res):
 
     # 7. Memastikan harga/cost masuk akal (tidak negatif)
     self.assertTrue(all(option["cost"] >= 0 for option in data["shipping_options"]))
-    
+
     # 8. Test CheckoutSession
     checkout_sessions = CheckoutSession.objects.all()
-    self.assertEqual(len(checkout_sessions),1)
-    
+    self.assertEqual(len(checkout_sessions), 1)
+
     checkout_session = checkout_sessions.first()
     self.assertTrue(isinstance(checkout_session.id, uuid.UUID))
     self.assertEqual(checkout_session.cart_ids, [1])
     self.assertEqual(checkout_session.user.email, "test@gmail.com")
     self.assertEqual(len(checkout_session.user.shippingaddress_set.all()), 1)
-    self.assertEqual(checkout_session.destination, checkout_session.user.shippingaddress_set.first())
+    self.assertEqual(
+        checkout_session.destination, checkout_session.user.shippingaddress_set.first()
+    )
     self.assertEqual(checkout_session.store.email, "store@gmail.com")
-    
+
     # value di tambah 10 menit dari menit 45 jadi 55
     # value di convert dari lokal ke utc (jam 11 > jam 4)
-    self.assertEqual(checkout_session.expires_at.strftime("%Y-%m-%d %H:%M:%S"), "2025-12-08 04:55:00")
+    self.assertEqual(
+        checkout_session.expires_at.strftime("%Y-%m-%d %H:%M:%S"), "2025-12-08 04:55:00"
+    )
+
 
 @freeze_time("2025-12-08T11:45:00+07:00")
 class CheckoutTest(TransactionTestCase):
@@ -177,8 +182,8 @@ class CheckoutTest(TransactionTestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
     @patch("accounts.signals.logger")
-    @patch("order.views.logger")
-    @patch("order.views.logger_error")
+    @patch("order.views_order_process.logger")
+    @patch("order.views_order_process.logger_error")
     @patch("order.utils.logger")
     @patch("order.utils.logger_error")
     def test(
@@ -218,8 +223,8 @@ class CheckoutTest(TransactionTestCase):
         )
 
     @patch("accounts.signals.logger")
-    @patch("order.views.logger")
-    @patch("order.views.logger_error")
+    @patch("order.views_order_process.logger")
+    @patch("order.views_order_process.logger_error")
     @patch("order.utils.logger")
     @patch("order.utils.logger_error")
     def test_with_ship_addr_id(
@@ -268,8 +273,8 @@ class CheckoutTest(TransactionTestCase):
         )
 
     @patch("accounts.signals.logger")
-    @patch("order.views.logger")
-    @patch("order.views.logger_error")
+    @patch("order.views_order_process.logger")
+    @patch("order.views_order_process.logger_error")
     @patch("order.utils.logger")
     @patch("order.utils.logger_error")
     def test_error_data_cart_ids(
@@ -330,8 +335,8 @@ class CheckoutTest(TransactionTestCase):
         )
 
     @patch("accounts.signals.logger")
-    @patch("order.views.logger")
-    @patch("order.views.logger_error")
+    @patch("order.views_order_process.logger")
+    @patch("order.views_order_process.logger_error")
     @patch("order.utils.logger")
     @patch("order.utils.logger_error")
     def test_error_store_origin(
@@ -380,8 +385,8 @@ class CheckoutTest(TransactionTestCase):
         self.assertEqual(args[0], "Store aktif tidak ditemukan. User ID: 1")
 
     @patch("accounts.signals.logger")
-    @patch("order.views.logger")
-    @patch("order.views.logger_error")
+    @patch("order.views_order_process.logger")
+    @patch("order.views_order_process.logger_error")
     @patch("order.utils.logger")
     @patch("order.utils.logger_error")
     def test_error_destination(
@@ -435,8 +440,8 @@ class CheckoutTest(TransactionTestCase):
         )
 
     @patch("accounts.signals.logger")
-    @patch("order.views.logger")
-    @patch("order.views.logger_error")
+    @patch("order.views_order_process.logger")
+    @patch("order.views_order_process.logger_error")
     @patch("order.utils.logger")
     @patch("order.utils.logger_error")
     @override_settings(API_KEY_RAJA_ONGKIR_SHIPPING_COST="invalid key")

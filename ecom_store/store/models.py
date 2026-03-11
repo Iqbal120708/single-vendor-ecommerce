@@ -20,7 +20,7 @@ class Store(BaseModel):
         if self.phone_number:
             return str(self.phone_number).replace("+", "")
         return ""
-        
+
     def clean(self):
         if not self.shipping_address.user.is_superuser:
             raise ValidationError(

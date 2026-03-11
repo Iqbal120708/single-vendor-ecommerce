@@ -25,7 +25,7 @@ def fetch_shipping_rates_from_rajaongkir(payload):
         data=payload,
         headers=headers,
     )
-    
+
     data = res.json()
     if res.status_code == 200:
         for item in data["data"]:
@@ -82,7 +82,7 @@ def create_order_details(order_items):
                 "subtotal": int(item.product_price) * item.qty,
             }
         )
-            
+
     return order_details
 
 
@@ -134,7 +134,7 @@ def create_order_item(order, carts):
 # belum selesai
 def fetch_order_rajaongkir(order):
     order_details = create_order_details(order.items.all())
-    
+
     order_data = {
         "order_date": str(localtime(order.created_at).date()),
         "brand_name": order.store.brand_name,
@@ -161,7 +161,7 @@ def fetch_order_rajaongkir(order):
         # "origin_pin_point": "-7.274631, 109.207174",
         # "destination_pin_point": "-7.274631, 109.207174",
     }
-    
+
     headers = {"x-api-key": settings.API_KEY_RAJA_ONGKIR_SHIPPING_DELIVERY}
     res = requests.post(
         "https://api-sandbox.collaborator.komerce.id/order/api/v1/orders/store",
@@ -169,26 +169,24 @@ def fetch_order_rajaongkir(order):
         headers=headers,
     )
     return res
-    
+
+
 # def change_payment_status_order(order, transaction_status):
 #     if transaction_status in ["settlement", "capture"]:
-#         if fraud_status == "accept": 
+#         if fraud_status == "accept":
 #             order.payment_status = "paid"
 #     elif transaction_status in ["deny", "cancel", "expire"]:
 #         order.payment_status = "failed"
 #     elif transaction_status == "refund":
 #         order.payment_status = "refunded"
-        
+
 #     return order.payment_status
-        
+
+
 def reduce_product_stock(order_items):
     product_ids = order_items.values_list("product_id", flat=True)
 
-    products = (
-        Product.objects
-        .select_for_update()
-        .filter(id__in=product_ids)
-    )
+    products = Product.objects.select_for_update().filter(id__in=product_ids)
 
     product_map = {p.id: p for p in products}
 

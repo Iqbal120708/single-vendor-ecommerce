@@ -63,11 +63,11 @@ INSTALLED_APPS = [
     "order",
     "store",
     "comment",
-   # "corsheaders",
+    # "corsheaders",
 ]
 
 MIDDLEWARE = [
-    #"corsheaders.middleware.CorsMiddleware",
+    # "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -277,7 +277,9 @@ LOGGING = {
 }
 
 API_KEY_RAJA_ONGKIR_SHIPPING_COST = os.environ.get("API_KEY_RAJA_ONGKIR_SHIPPING_COST")
-API_KEY_RAJA_ONGKIR_SHIPPING_DELIVERY = os.environ.get("API_KEY_RAJA_ONGKIR_SHIPPING_DELIVERY")
+API_KEY_RAJA_ONGKIR_SHIPPING_DELIVERY = os.environ.get(
+    "API_KEY_RAJA_ONGKIR_SHIPPING_DELIVERY"
+)
 
 MIDTRANS_SERVER_KEY = os.environ.get("MIDTRANS_SERVER_KEY")
 MIDTRANS_CLIENT_KEY = os.environ.get("MIDTRANS_CLIENT_KEY")

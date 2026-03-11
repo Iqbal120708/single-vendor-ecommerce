@@ -8,7 +8,6 @@ from product.models import Category, Product
 # from decimal import Decimal
 
 
-
 User = get_user_model()
 
 
