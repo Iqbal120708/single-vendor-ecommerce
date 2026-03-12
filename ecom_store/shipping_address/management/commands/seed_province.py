@@ -14,7 +14,7 @@ class Command(BaseCommand):
     help = "Generate data province use data RajaOngkir"
 
     def handle(self, *args, **kwargs):
-        headers = {"Key": settings.API_KEY_RAJA_ONGKIR}
+        headers = {"Key": settings.API_KEY_RAJA_ONGKIR_SHIPPING_COST}
         province_req = req.get(
             "https://rajaongkir.komerce.id/api/v1/destination/province", headers=headers
         )

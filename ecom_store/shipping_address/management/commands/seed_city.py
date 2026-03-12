@@ -14,7 +14,7 @@ class Command(BaseCommand):
     help = "Generate data city use data RajaOngkir"
 
     def handle(self, *args, **kwargs):
-        headers = {"Key": settings.API_KEY_RAJA_ONGKIR}
+        headers = {"Key": settings.API_KEY_RAJA_ONGKIR_SHIPPING_COST}
 
         city_data = City.objects.values_list("province__ro_id", flat=True).distinct()
         provinces = Province.objects.all()

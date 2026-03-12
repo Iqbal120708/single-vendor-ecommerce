@@ -37,3 +37,6 @@ class Store(BaseModel):
         raise ValidationError(
             "Data toko tidak dapat dihapus. Silakan nonaktifkan toko dengan mengubah status aktif."
         )
+        
+    def __str__(self):
+        return self.name

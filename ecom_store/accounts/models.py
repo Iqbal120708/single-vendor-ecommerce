@@ -13,37 +13,29 @@ class UserDeleteWarning(Warning):
 class CustomUser(AbstractUser):
     email = models.EmailField(unique=True)
     phone_number = PhoneNumberField(unique=True)
-    pending_delete = models.BooleanField(default=False)
-    #     shipping_addresses = models.ManyToManyField(
-    #     "shipping_address.ShippingAddress",
-    #     through="UserShippingAddress",
-    #     related_name="users",
-    #     blank=True
-    # )
-
+    
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = []
+    
     @property
     def clean_phone_number(self):
         if self.phone_number:
             return str(self.phone_number).replace("+", "")
         return ""
 
-    def delete(self, *args, **kwargs):
-        if not self.pending_delete:
-            warnings.warn(
-                "method delete() di model User dipanggil! Gunakan method soft_delete() untuk delete. Lakukan penghapusan ulang jika tetap ingin menghapus",
-                category=UserDeleteWarning,
-                stacklevel=2,
-            )
-            self.pending_delete = True
-            super().save(*args, **kwargs)
-        else:
-            return super().delete(*args, **kwargs)
-
-    def soft_delete(self, *args, **kwargs):
+    def soft_delete(self):
         self.is_active = False
-        self.save()
+        self.save(update_fields=["is_active"])
+    
+    def hard_delete(self):
+        return super().delete()
+    
+    def delete(self, *args, **kwargs):
+        raise RuntimeError("Gunakan soft_delete() atau hard_delete()")
 
-
+    def __str__(self):
+        return self.email
+        
 # from django.db.models import Q
 
 # class UserShippingAddress(models.Model):

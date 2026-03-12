@@ -14,7 +14,7 @@ class Command(BaseCommand):
     help = "Generate data district use data RajaOngkir"
 
     def handle(self, *args, **kwargs):
-        headers = {"Key": settings.API_KEY_RAJA_ONGKIR}
+        headers = {"Key": settings.API_KEY_RAJA_ONGKIR_SHIPPING_COST}
 
         district_data = District.objects.values_list(
             "city__ro_id", flat=True

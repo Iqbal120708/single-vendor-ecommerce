@@ -10,18 +10,24 @@ class Province(BaseModel):
     ro_id = models.IntegerField(unique=True)
     name = models.CharField(max_length=100)
 
+    def __str__(self):
+        return self.name
 
 class City(BaseModel):
     ro_id = models.IntegerField(unique=True)
     name = models.CharField(max_length=100)
     province = models.ForeignKey(Province, on_delete=models.CASCADE)
 
+    def __str__(self):
+        return self.name
 
 class District(BaseModel):
     ro_id = models.IntegerField(unique=True)
     name = models.CharField(max_length=100)
     city = models.ForeignKey(City, on_delete=models.CASCADE)
 
+    def __str__(self):
+        return self.name
 
 class SubDistrict(BaseModel):
     ro_id = models.IntegerField(unique=True)
@@ -29,6 +35,8 @@ class SubDistrict(BaseModel):
     district = models.ForeignKey(District, on_delete=models.CASCADE)
     zip_code = models.CharField(max_length=10)
 
+    def __str__(self):
+        return f"{self.name} - {self.zip_code}"
 
 class ShippingAddress(BaseModel):
     province = models.ForeignKey(Province, on_delete=models.PROTECT)
@@ -93,7 +101,9 @@ class ShippingAddress(BaseModel):
         self.clean()
         super().save(*args, **kwargs)
 
-
+    def __str__(self):
+        return self.formatted_address
+        
 # shi_add = ShippingAddress.objects.filter(
 #     province__name__iexact="",
 #     city__name__iexact="",

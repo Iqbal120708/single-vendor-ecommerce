@@ -14,7 +14,7 @@ class Command(BaseCommand):
     help = "Generate data subdistrict use data RajaOngkir"
 
     def handle(self, *args, **kwargs):
-        headers = {"Key": settings.API_KEY_RAJA_ONGKIR}
+        headers = {"Key": settings.API_KEY_RAJA_ONGKIR_SHIPPING_COST}
 
         subdistrict_data = SubDistrict.objects.values_list(
             "district__ro_id", flat=True

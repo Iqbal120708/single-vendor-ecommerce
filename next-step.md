@@ -65,23 +65,22 @@ Fokus: sinkronisasi status pengiriman
 
 ---
 
-## 4. Fitur Read Order & Manajemen History Order
+## 4. Fitur Read Order **SELESAI**
 
 Fokus: akses data oleh user tanpa merusak data inti sistem
 
-### 4.1 Read Order Berdasarkan User
+### 4.1 Read Order Berdasarkan User **Selesai**
 - Endpoint untuk menampilkan order milik user sendiri
 - Pastikan user **tidak bisa membaca order user lain**
 - Pastikan user **tidak bisa membaca order yang `is_archived = True`**
 - Gunakan pagination
 
-### 4.2 Filter Order
+### 4.2 Filter Order **Selesai**
 Tambahkan filter:
 - Berdasarkan `order_status`
 - Berdasarkan `payment_status`
-- Berdasarkan tanggal (opsional)
 
-### 4.3 Hapus History Order (Soft Delete)
+### 4.3 Hapus History Order (Soft Delete) **Selesai**
 - User **tidak benar-benar menghapus data**
 - Update field:
   - `is_archived = True`
@@ -99,13 +98,13 @@ Tambahkan filter:
 
 Fokus: validasi pembelian & kontrol spam
 
-### 5.1 Validasi User Sudah Membeli Produk
+### 5.1 Validasi User Sudah Membeli Produk **Selesai**
 - User hanya bisa komen jika:
   - Pernah membeli produk
   - Order berstatus `COMPLETED`
 - Tolak request jika syarat tidak terpenuhi
 
-### 5.2 CRUD Comment untuk User
+### 5.2 CRUD Comment untuk User **Selesai**
 User bisa:
 - Create comment
 - Read comment miliknya
@@ -119,6 +118,7 @@ Field umum:
 - comment
 - is_active / is_archived
 - created_at
+- updated_at
 
 ### 5.3 Manajemen Comment oleh Admin
 Admin bisa:
@@ -136,6 +136,12 @@ Fokus: efisiensi & kontrol backend
 - Order
 - OrderItem
 - Product
+- Category
+- Province
+- City
+- District
+- SubDistrict
+- ShippingAddress
 - User
 - Comment
 - Store

@@ -27,3 +27,6 @@ class Comment(BaseModel):
     def is_editable(self):
         batas_waktu = self.created_at + timedelta(hours=24)
         return timezone.now() <= batas_waktu
+        
+    def __str__(self):
+        return f"{self.user.username} - {self.product.name}: {self.rating}"

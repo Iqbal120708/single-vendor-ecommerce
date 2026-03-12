@@ -157,3 +157,6 @@ class CheckoutSession(BaseModel):
     )
     store = models.ForeignKey("store.Store", on_delete=models.PROTECT)
     expires_at = models.DateTimeField()
+    
+    def __str__(self):
+        return f"{self.user} - {self.id}"
