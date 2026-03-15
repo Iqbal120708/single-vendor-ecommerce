@@ -19,7 +19,11 @@ from dj_rest_auth.urls import urlpatterns as dj_rest_auth_urls
 from dj_rest_auth.views import PasswordResetConfirmView
 from django.contrib import admin
 from django.urls import include, path
-
+# from drf_spectacular.views import (
+#     SpectacularAPIView,
+#     SpectacularSwaggerView,
+#     SpectacularRedocView,
+# )
 from accounts.views import CustomTokenRefreshView, CustomVerifyEmailAPIView
 
 for i, urlpattern in enumerate(dj_rest_auth_urls):
@@ -48,3 +52,16 @@ urlpatterns = [
     path("api/order/", include("order.urls")),
     path("api/comment/", include("comment.urls")),
 ]
+
+
+
+# urlpatterns += [
+#     # Download schema (JSON/YAML)
+#     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+
+#     # UI Swagger
+#     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+
+#     # UI Redoc
+#     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+# ]

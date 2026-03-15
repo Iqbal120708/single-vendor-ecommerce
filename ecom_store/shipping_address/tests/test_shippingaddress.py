@@ -4,7 +4,7 @@ from unittest.mock import patch
 from allauth.account.models import EmailAddress
 from django.contrib.auth import get_user_model
 # from django.db import connection
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
 from django.urls import reverse
 from freezegun import freeze_time
 from rest_framework.test import APIClient
@@ -15,6 +15,7 @@ from shipping_address.models import (City, District, Province, ShippingAddress,
 User = get_user_model()
 
 
+@override_settings(USE_TZ=True)
 @freeze_time("2025-12-08T11:45:00+07:00")
 class TestAddress(TransactionTestCase):
     reset_sequences = True

@@ -94,7 +94,7 @@ Tambahkan filter:
 
 ---
 
-## 5. Fitur Comment / Review Product
+## 5. Fitur Comment / Review Product **SELESAI**
 
 Fokus: validasi pembelian & kontrol spam
 
@@ -120,7 +120,7 @@ Field umum:
 - created_at
 - updated_at
 
-### 5.3 Manajemen Comment oleh Admin
+### 5.3 Manajemen Comment oleh Admin **Selesai**
 Admin bisa:
 - Melihat semua comment
 - Mengarsipkan comment (`is_archived = True`)
@@ -128,11 +128,11 @@ Admin bisa:
 
 ---
 
-## 6. Manajemen Data Menggunakan Django Admin
+## 6. Manajemen Data Menggunakan Django Admin **SELESAI**
 
 Fokus: efisiensi & kontrol backend
 
-### 6.1 Gunakan Django Admin untuk Semua Model
+### 6.1 Gunakan Django Admin untuk Semua Model **Selesai**
 - Order
 - OrderItem
 - Product
@@ -148,7 +148,7 @@ Fokus: efisiensi & kontrol backend
 - CheckoutSession
 - Cart
 
-### 6.2 Optimasi Django Admin
+### 6.2 Optimasi Django Admin **Selesai**
 Tambahkan:
 - `list_display`
 - `list_filter`
@@ -156,12 +156,11 @@ Tambahkan:
 - `readonly_fields` untuk field sensitif
 - `date_hierarchy` (jika relevan)
 
-### 6.3 Keamanan Admin
+### 6.3 Keamanan Admin **Selesai**
 - Batasi aksi delete
 - Gunakan permission:
   - staff
   - admin
-- Audit log untuk perubahan penting
 
 ---
 

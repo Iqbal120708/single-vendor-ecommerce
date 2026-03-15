@@ -209,7 +209,7 @@ class CheckoutTest(TransactionTestCase):
         res = self.client.post(
             reverse("checkout"), data={"cart_ids": [res_add.data["id"]]}, format="json"
         )
-
+        
         res_test_success(self, res)
 
         order_log_view.info.assert_called()
@@ -242,6 +242,7 @@ class CheckoutTest(TransactionTestCase):
         self.handle_login()
         # add cart
         res_add = self.client.post(reverse("add_to_cart", args=[1]), data={})
+        
         self.assertEqual(res_add.status_code, 201)
 
         # update cart
@@ -303,9 +304,10 @@ class CheckoutTest(TransactionTestCase):
         self.assertEqual(
             res.data["error"], "cart_ids harus berupa list dan tidak boleh kosong."
         )
-
+        
         # checkout cart_ids != list
         res = self.client.post(reverse("checkout"), data={"cart_ids": 1}, format="json")
+        
         self.assertEqual(res.status_code, 400)
         self.assertEqual(
             res.data["error"], "cart_ids harus berupa list dan tidak boleh kosong."
@@ -315,6 +317,7 @@ class CheckoutTest(TransactionTestCase):
         res = self.client.post(
             reverse("checkout"), data={"cart_ids": ["a"]}, format="json"
         )
+        
         self.assertEqual(res.status_code, 400)
         self.assertEqual(
             res.data["error"],
@@ -370,8 +373,8 @@ class CheckoutTest(TransactionTestCase):
             reverse("checkout"), data={"cart_ids": [res_add.data["id"]]}, format="json"
         )
 
-        self.assertEqual(res.status_code, 400)
-        self.assertEqual(res.data["error"], "Toko tidak ditemukan.")
+        self.assertEqual(res.status_code, 503)
+        self.assertEqual(res.data["error"], "Layanan tidak tersedia saat ini.")
 
         order_log_view.info.assert_called()
         logs = order_log_view.info.call_args_list

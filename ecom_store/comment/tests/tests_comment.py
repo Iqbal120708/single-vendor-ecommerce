@@ -24,7 +24,7 @@ User = get_user_model()
 @patch("order.views_order_process.logger_error")
 @patch("order.utils.logger")
 @patch("order.utils.logger_error")
-class TransactionTest(APITestCase):
+class CommentTest(APITestCase):
     # reset_sequences = True
     @classmethod
     def setUpTestData(cls):
@@ -122,7 +122,7 @@ class TransactionTest(APITestCase):
 
         res = self.client.post(
             reverse("comment", args=[3]),
-            data={"rating": 3, "content": "test update comment"},
+            data={"rating": 3, "content": "test comment"},
         )
 
         self.assertEqual(res.status_code, 403)
@@ -153,7 +153,7 @@ class TransactionTest(APITestCase):
             reverse("comment", args=[order_item.product.id]),
             data={"rating": 3, "content": "test comment"},
         )
-
+    
         self.assertEqual(res.status_code, 201)
 
         queryset = Comment.objects.count()
@@ -214,7 +214,7 @@ class TransactionTest(APITestCase):
             reverse("comment", args=[2]),
             data={"rating": 3, "content": "test update comment"},
         )
-
+    
         self.assertEqual(res.status_code, 200)
 
         # previous data

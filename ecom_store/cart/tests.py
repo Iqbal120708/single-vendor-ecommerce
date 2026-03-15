@@ -5,7 +5,7 @@ from allauth.account.models import EmailAddress
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 # from django.db import connection
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
 from django.urls import reverse
 from freezegun import freeze_time
 from rest_framework.test import APIClient
@@ -16,6 +16,7 @@ User = get_user_model()
 
 
 @freeze_time("2025-12-08T11:45:00+07:00")
+@override_settings(USE_TZ=True)
 class CartTest(TransactionTestCase):
     reset_sequences = True  # otomatis reset PK jadi 1
 

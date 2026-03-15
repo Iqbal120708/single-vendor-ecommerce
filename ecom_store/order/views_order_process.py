@@ -55,7 +55,8 @@ class CheckoutView(APIView):
                 f"Store aktif tidak ditemukan. User ID: {request.user.id}"
             )
             return Response(
-                {"error": "Toko tidak ditemukan."}, status=status.HTTP_400_BAD_REQUEST
+                {"error": "Layanan tidak tersedia saat ini."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
 
         origin = store.shipping_address

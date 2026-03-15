@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     "order",
     "store",
     "comment",
+    #"drf_spectacular",
     # "corsheaders",
 ]
 
@@ -182,8 +183,15 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
+    #'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
+# SPECTACULAR_SETTINGS = {
+#     'TITLE': 'E-Commerce API',
+#     'DESCRIPTION': 'API for single-vendor online stores',
+#     'VERSION': '1.0.0',
+#     'SERVE_INCLUDE_SCHEMA': False,
+# }
 
 SITE_ID = 1
 
