@@ -8,6 +8,7 @@ from .models import City, District, Province, ShippingAddress, SubDistrict
 from .serializers import (CitySerializer, DistrictSerializer,
                           ProvinceSerializer, ShippingAddressSerializer,
                           SubDistrictSerializer)
+from .utils import get_destination_id
 
 
 class BaseAddressView(APIView):
@@ -114,7 +115,9 @@ class ShippingAddressView(APIView):
                 data=request.data, context={"request": request}
             )
             serializer.is_valid(raise_exception=True)
-            serializer.save()
+            data = serializer.validated_data
+            destination_id = get_destination_id(data)
+            serializer.save(destination_id=destination_id)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def put(self, request, pk):
@@ -141,7 +144,24 @@ class ShippingAddressView(APIView):
             )
 
             serializer.is_valid(raise_exception=True)
-            serializer.save()
+            
+            data = serializer.validated_data
+
+            need_refresh_destination = any(
+                [
+                    instance.province != data["province"],
+                    instance.city != data["city"],
+                    instance.district != data["district"],
+                    instance.subdistrict != data["subdistrict"],
+                ]
+            )
+    
+            if need_refresh_destination:
+                destination_id = get_destination_id(data)
+            else:
+                destination_id = instance.destination_id
+
+            serializer.save(destination_id=destination_id)
 
         return Response(serializer.data)
 

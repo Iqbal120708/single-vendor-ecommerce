@@ -45,6 +45,7 @@ class ShippingAddress(BaseModel):
     subdistrict = models.ForeignKey(SubDistrict, on_delete=models.PROTECT)
     street_address = models.CharField(max_length=255)
     is_default = models.BooleanField(default=False)
+    destination_id = models.IntegerField()
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
 
     def clean(self):

@@ -18,6 +18,13 @@ from store.models import Store
 
 User = get_user_model()
 
+MOCK_SHIPPING_RATES = [
+    {'name': 'Citra Van Titipan Kilat (TIKI)', 'code': 'tiki', 'service': 'REG', 'description': 'Reguler Service', 'cost': 24000, 'etd': '2 day'},
+    {'name': 'J&T Express', 'code': 'jnt', 'service': 'EZ', 'description': 'Reguler', 'cost': 21000, 'etd': ''},
+    {'name': 'Jalur Nugraha Ekakurir (JNE)', 'code': 'jne', 'service': 'REG', 'description': 'Reguler', 'cost': 27000, 'etd': '1 day'},
+    {'name': 'Ninja Xpress', 'code': 'ninja', 'service': 'STD', 'description': 'Standard', 'cost': 11000, 'etd': '2 day'},
+    {'name': 'POS Indonesia (POS)', 'code': 'pos', 'service': 'Pos Reguler', 'description': '240', 'cost': 21000, 'etd': '2 day'},
+]
 
 def res_test_success(self, res):
     data = res.data
@@ -47,7 +54,7 @@ def res_test_success(self, res):
     # 6. Validasi data spesifik (Opsional)
     # Misalnya, mengecek apakah kurir 'tiki' ada dalam daftar
     codes = [option["code"] for option in data["shipping_options"]]
-
+    
     self.assertIn("tiki", codes)
     self.assertIn("jne", codes)
     self.assertIn("ninja", codes)
@@ -186,35 +193,39 @@ class CheckoutTest(TransactionTestCase):
     @patch("order.views_order_process.logger_error")
     @patch("order.utils.logger")
     @patch("order.utils.logger_error")
+    @patch("order.views_order_process.fetch_shipping_rates_from_rajaongkir")
     def test(
         self,
+        mock_fetch_shipping,
         order_logger_error_util,
         order_log_util,
         order_logger_error_view,
         order_log_view,
         mock_logger,
     ):
+        mock_fetch_shipping.return_value = MOCK_SHIPPING_RATES
+    
         self.handle_login()
         # add cart
         res_add = self.client.post(reverse("add_to_cart", args=[1]), data={})
         self.assertEqual(res_add.status_code, 201)
-
+    
         # update cart
         res_patch = self.client.patch(
             reverse("cart", args=[res_add.data["id"]]), data={"qty": 3}
         )
         self.assertEqual(res_patch.status_code, 200)
-
+    
         # checkout
         res = self.client.post(
             reverse("checkout"), data={"cart_ids": [res_add.data["id"]]}, format="json"
         )
         
         res_test_success(self, res)
-
+    
         order_log_view.info.assert_called()
         logs = order_log_view.info.call_args_list
-
+    
         self.assertEqual(len(logs), 2)
         self.assertEqual(logs[0].args[0], "User 1 memulai checkout untuk cart_ids: [1]")
         self.assertEqual(
@@ -227,8 +238,10 @@ class CheckoutTest(TransactionTestCase):
     @patch("order.views_order_process.logger_error")
     @patch("order.utils.logger")
     @patch("order.utils.logger_error")
+    @patch("order.views_order_process.fetch_shipping_rates_from_rajaongkir")
     def test_with_ship_addr_id(
         self,
+        mock_fetch_shipping,
         order_logger_error_util,
         order_log_util,
         order_logger_error_view,
@@ -239,18 +252,20 @@ class CheckoutTest(TransactionTestCase):
         this test used key shipping_address_id in body request
         response remains the same
         """
+        mock_fetch_shipping.return_value = MOCK_SHIPPING_RATES
+    
         self.handle_login()
         # add cart
         res_add = self.client.post(reverse("add_to_cart", args=[1]), data={})
-        
+    
         self.assertEqual(res_add.status_code, 201)
-
+    
         # update cart
         res_patch = self.client.patch(
             reverse("cart", args=[res_add.data["id"]]), data={"qty": 3}
         )
         self.assertEqual(res_patch.status_code, 200)
-
+    
         # checkout
         res = self.client.post(
             reverse("checkout"),
@@ -260,12 +275,12 @@ class CheckoutTest(TransactionTestCase):
             },
             format="json",
         )
-
+    
         res_test_success(self, res)
-
+    
         order_log_view.info.assert_called()
         logs = order_log_view.info.call_args_list
-
+    
         self.assertEqual(len(logs), 2)
         self.assertEqual(logs[0].args[0], "User 1 memulai checkout untuk cart_ids: [1]")
         self.assertEqual(

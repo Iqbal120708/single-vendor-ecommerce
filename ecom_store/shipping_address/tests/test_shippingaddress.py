@@ -51,7 +51,7 @@ class TestAddress(TransactionTestCase):
         self.district = District.objects.create(ro_id=1, name="MATARAM", city=self.city)
 
         self.subdistrict = SubDistrict.objects.create(
-            ro_id=1, name="MATARAM", zip_code="12455", district=self.district
+            ro_id=1, name="MATARAM TIMUR", zip_code="83121", district=self.district
         )
 
         self.shipping_address = ShippingAddress.objects.create(
@@ -61,6 +61,7 @@ class TestAddress(TransactionTestCase):
             subdistrict=self.subdistrict,
             street_address="Jl. Test",
             is_default=True,
+            destination_id=1,
             user=self.user,
         )
 
@@ -71,6 +72,7 @@ class TestAddress(TransactionTestCase):
             subdistrict=self.subdistrict,
             street_address="Jl. Test 2",
             is_default=True,
+            destination_id=1,
             user=self.user2,
         )
 
@@ -80,6 +82,7 @@ class TestAddress(TransactionTestCase):
             district=self.district,
             subdistrict=self.subdistrict,
             street_address="Jl. Test 3",
+            destination_id=1,
             user=self.user2,
         )
 
@@ -118,8 +121,8 @@ class TestAddress(TransactionTestCase):
         self.assertEqual(data["district"]["name"], "MATARAM")
 
         self.assertEqual(data["subdistrict"]["ro_id"], 1)
-        self.assertEqual(data["subdistrict"]["name"], "MATARAM")
-        self.assertEqual(data["subdistrict"]["zip_code"], "12455")
+        self.assertEqual(data["subdistrict"]["name"], "MATARAM TIMUR")
+        self.assertEqual(data["subdistrict"]["zip_code"], "83121")
 
         self.assertEqual(data["street_address"], "Jl. Test")
         self.assertEqual(data["created_at"], "2025-12-08T11:45:00+07:00")
@@ -149,8 +152,8 @@ class TestAddress(TransactionTestCase):
         self.assertEqual(data["district"]["name"], "MATARAM")
 
         self.assertEqual(data["subdistrict"]["ro_id"], 1)
-        self.assertEqual(data["subdistrict"]["name"], "MATARAM")
-        self.assertEqual(data["subdistrict"]["zip_code"], "12455")
+        self.assertEqual(data["subdistrict"]["name"], "MATARAM TIMUR")
+        self.assertEqual(data["subdistrict"]["zip_code"], "83121")
 
         self.assertEqual(data["street_address"], "Jl. Test 2")
         self.assertEqual(data["created_at"], "2025-12-08T11:45:00+07:00")
@@ -172,8 +175,8 @@ class TestAddress(TransactionTestCase):
         self.assertEqual(data2["district"]["name"], "MATARAM")
 
         self.assertEqual(data2["subdistrict"]["ro_id"], 1)
-        self.assertEqual(data2["subdistrict"]["name"], "MATARAM")
-        self.assertEqual(data2["subdistrict"]["zip_code"], "12455")
+        self.assertEqual(data2["subdistrict"]["name"], "MATARAM TIMUR")
+        self.assertEqual(data2["subdistrict"]["zip_code"], "83121")
 
         self.assertEqual(data2["street_address"], "Jl. Test 3")
         self.assertEqual(data2["created_at"], "2025-12-08T11:45:00+07:00")
@@ -201,8 +204,8 @@ class TestAddress(TransactionTestCase):
         self.assertEqual(data["district"]["name"], "MATARAM")
 
         self.assertEqual(data["subdistrict"]["ro_id"], 1)
-        self.assertEqual(data["subdistrict"]["name"], "MATARAM")
-        self.assertEqual(data["subdistrict"]["zip_code"], "12455")
+        self.assertEqual(data["subdistrict"]["name"], "MATARAM TIMUR")
+        self.assertEqual(data["subdistrict"]["zip_code"], "83121")
 
         self.assertEqual(data["street_address"], "Jl. Test")
         self.assertEqual(data["created_at"], "2025-12-08T11:45:00+07:00")
@@ -237,8 +240,8 @@ class TestAddress(TransactionTestCase):
                 "province_name": "NUSA TENGGARA BARAT (NTB)",
                 "city_name": "MATARAM",
                 "district_name": "MATARAM",
-                "subdistrict_name": "MATARAM",
-                "zip_code": "12455",
+                "subdistrict_name": "MATARAM TIMUR",
+                "zip_code": "83121",
                 "street_address": "Jl. Post",
                 "is_default": True,
             },
@@ -261,8 +264,8 @@ class TestAddress(TransactionTestCase):
         self.assertEqual(data["district"]["name"], "MATARAM")
 
         self.assertEqual(data["subdistrict"]["ro_id"], 1)
-        self.assertEqual(data["subdistrict"]["name"], "MATARAM")
-        self.assertEqual(data["subdistrict"]["zip_code"], "12455")
+        self.assertEqual(data["subdistrict"]["name"], "MATARAM TIMUR")
+        self.assertEqual(data["subdistrict"]["zip_code"], "83121")
 
         self.assertEqual(data["street_address"], "Jl. Post")
         self.assertEqual(data["created_at"], "2025-12-08T11:45:00+07:00")
@@ -288,6 +291,10 @@ class TestAddress(TransactionTestCase):
         # data ada 4, 3 dari setup, 1 dari post
         shipping_address = ShippingAddress.objects.all()
         self.assertEqual(len(shipping_address), 4)
+        
+        # mengecek destination_id
+        shipping_address = ShippingAddress.objects.filter(street_address="Jl. Post").first()
+        self.assertEqual(shipping_address.destination_id, 1)
 
     # @patch("accounts.signals.logger")
     # def test_post_old_data(self, mock_logger):
@@ -300,7 +307,7 @@ class TestAddress(TransactionTestCase):
     #         "city_name": "MATARAM",
     #         "district_name": "MATARAM",
     #         "subdistrict_name": "MATARAM",
-    #         "zip_code": "12455",
+    #         "zip_code": "83121",
     #         "street_address": "Jl. Test 2",
     #     })
 
@@ -322,7 +329,7 @@ class TestAddress(TransactionTestCase):
 
     #     self.assertEqual(data["subdistrict"]["ro_id"], 1)
     #     self.assertEqual(data["subdistrict"]["name"], "MATARAM")
-    #     self.assertEqual(data["subdistrict"]["zip_code"], "12455")
+    #     self.assertEqual(data["subdistrict"]["zip_code"], "83121")
 
     #     self.assertEqual(data["street_address"], "Jl. Test 2")
     #     self.assertEqual(data["created_at"], "2025-12-08T11:45:00+07:00")
@@ -344,16 +351,24 @@ class TestAddress(TransactionTestCase):
 
     @freeze_time("2025-12-16T19:07:00+07:00")
     @patch("accounts.signals.logger")
-    def test_put(self, mock_logger):
+    def test_put_refresh_destination_when_location_changed(self, mock_logger):
+        """
+        cek perubahan data subdistrict, zip_code, street_address
+        cek perubahan destination_id
+        """
         self.handle_login()
+        
+        self.subdistrict = SubDistrict.objects.create(
+            ro_id=2, name="PAGESANGAN", zip_code="83127", district=self.district
+        )
         res_put = self.client.put(
             reverse("shipping_address", args=[1]),
             data={
                 "province_name": "NUSA TENGGARA BARAT (NTB)",
                 "city_name": "MATARAM",
                 "district_name": "MATARAM",
-                "subdistrict_name": "MATARAM",
-                "zip_code": "12455",
+                "subdistrict_name": "PAGESANGAN",
+                "zip_code": "83127",
                 "street_address": "Jl. Put",
                 "is_default": True,
             },
@@ -363,14 +378,69 @@ class TestAddress(TransactionTestCase):
 
         data = res_put.data
 
-        self.assertEqual(data["street_address"], "Jl. Put")
         self.assertEqual(data["created_at"], "2025-12-08T11:45:00+07:00")
         self.assertEqual(data["updated_at"], "2025-12-16T19:07:00+07:00")
         self.assertTrue(data["is_default"])
+        
+        # cek perubahan data subdistrict, zip_code, street_address
+        self.assertEqual(data["subdistrict"]["name"], "PAGESANGAN")
+        self.assertEqual(data["subdistrict"]["zip_code"], "83127")
+        self.assertEqual(data["street_address"], "Jl. Put")
 
         self.assertEqual(data["user"]["id"], 1)
         self.assertEqual(data["user"]["username"], "test")
         self.assertEqual(data["user"]["email"], "test@gmail.com")
+        
+        # mengecek destination_id
+        shipping_address = ShippingAddress.objects.filter(street_address="Jl. Put").first()
+        # pastikan != 1
+        self.assertEqual(shipping_address.destination_id, 2) 
+        
+    @freeze_time("2025-12-16T19:07:00+07:00")
+    @patch("accounts.signals.logger")
+    @patch("shipping_address.views.get_destination_id")
+    def test_put_not_refresh_destination_when_location_unchanged(self, mock_get_destination_id, mock_logger):
+        """
+        cek perubahan data street_address
+        cek tidak ada perubahan data destination_id
+        """
+        self.handle_login()
+
+        res_put = self.client.put(
+            reverse("shipping_address", args=[1]),
+            data={
+                "province_name": "NUSA TENGGARA BARAT (NTB)",
+                "city_name": "MATARAM",
+                "district_name": "MATARAM",
+                "subdistrict_name": "MATARAM TIMUR",
+                "zip_code": "83121",
+                "street_address": "Jl. Put",
+                "is_default": True,
+            },
+        )
+
+        self.assertEqual(res_put.status_code, 200)
+
+        data = res_put.data
+
+        self.assertEqual(data["created_at"], "2025-12-08T11:45:00+07:00")
+        self.assertEqual(data["updated_at"], "2025-12-16T19:07:00+07:00")
+        self.assertTrue(data["is_default"])
+        
+        # cek perubahan data street_address
+        self.assertEqual(data["street_address"], "Jl. Put")
+
+        self.assertEqual(data["user"]["id"], 1)
+        self.assertEqual(data["user"]["username"], "test")
+        self.assertEqual(data["user"]["email"], "test@gmail.com")
+        
+        # mengecek destination_id
+        shipping_address = ShippingAddress.objects.filter(street_address="Jl. Put").first()
+        # pastikan != 1
+        self.assertEqual(shipping_address.destination_id, 1) 
+        
+        # cek fungsi get_destination_id tidak dipanggil
+        mock_get_destination_id.assert_not_called()
 
     @freeze_time("2025-12-16T19:07:00+07:00")
     @patch("accounts.signals.logger")
@@ -388,8 +458,8 @@ class TestAddress(TransactionTestCase):
                 "province_name": "NUSA TENGGARA BARAT (NTB)",
                 "city_name": "MATARAM",
                 "district_name": "MATARAM",
-                "subdistrict_name": "MATARAM",
-                "zip_code": "12455",
+                "subdistrict_name": "MATARAM TIMUR",
+                "zip_code": "83121",
                 "street_address": "Jl. Put",
                 "is_default": True,
             },

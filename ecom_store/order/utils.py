@@ -134,7 +134,7 @@ def create_order_item(order, carts):
 # belum selesai
 def fetch_order_rajaongkir(order):
     order_details = create_order_details(order.items.all())
-
+    
     order_data = {
         "order_date": str(localtime(order.created_at).date()),
         "brand_name": order.store.brand_name,
@@ -147,8 +147,8 @@ def fetch_order_rajaongkir(order):
         "receiver_destination_id": order.destination_ro,
         "receiver_address": order.destination_address,
         "shipper_email": order.store.email,
-        "shipping": order.courier_code,
-        "shipping_type": order.shipping_type,
+        "shipping": "JNE", #order.courier_code,
+        "shipping_type": "CTC", #order.shipping_type,
         "payment_method": order.payment_method,
         "shipping_cost": order.shipping_cost,
         "shipping_cashback": order.shipping_cashback,
@@ -161,13 +161,14 @@ def fetch_order_rajaongkir(order):
         # "origin_pin_point": "-7.274631, 109.207174",
         # "destination_pin_point": "-7.274631, 109.207174",
     }
-
+    
     headers = {"x-api-key": settings.API_KEY_RAJA_ONGKIR_SHIPPING_DELIVERY}
     res = requests.post(
         "https://api-sandbox.collaborator.komerce.id/order/api/v1/orders/store",
         json=order_data,
         headers=headers,
     )
+    print(res.json())
     return res
 
 
