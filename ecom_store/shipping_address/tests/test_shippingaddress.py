@@ -62,6 +62,8 @@ class TestAddress(TransactionTestCase):
             street_address="Jl. Test",
             is_default=True,
             destination_id=1,
+            latitude=-8.5899,
+            longitude=116.1107,
             user=self.user,
         )
 
@@ -73,6 +75,8 @@ class TestAddress(TransactionTestCase):
             street_address="Jl. Test 2",
             is_default=True,
             destination_id=1,
+            latitude=-8.5899,
+            longitude=116.1107,
             user=self.user2,
         )
 
@@ -83,6 +87,8 @@ class TestAddress(TransactionTestCase):
             subdistrict=self.subdistrict,
             street_address="Jl. Test 3",
             destination_id=1,
+            latitude=-8.5899,
+            longitude=116.1107,
             user=self.user2,
         )
 
@@ -128,6 +134,9 @@ class TestAddress(TransactionTestCase):
         self.assertEqual(data["created_at"], "2025-12-08T11:45:00+07:00")
         self.assertEqual(data["updated_at"], "2025-12-08T11:45:00+07:00")
         self.assertTrue(data["is_default"])
+        
+        self.assertEqual(data["latitude"], "-8.5899")
+        self.assertEqual(data["longitude"], "116.1107")
 
         self.assertEqual(data["user"]["id"], 1)
         self.assertEqual(data["user"]["username"], "test")
@@ -159,6 +168,9 @@ class TestAddress(TransactionTestCase):
         self.assertEqual(data["created_at"], "2025-12-08T11:45:00+07:00")
         self.assertEqual(data["updated_at"], "2025-12-08T11:45:00+07:00")
         self.assertTrue(data["is_default"])
+        
+        self.assertEqual(data["latitude"], "-8.5899")
+        self.assertEqual(data["longitude"], "116.1107")
 
         self.assertEqual(data["user"]["id"], 2)
         self.assertEqual(data["user"]["username"], "test2")
@@ -182,6 +194,9 @@ class TestAddress(TransactionTestCase):
         self.assertEqual(data2["created_at"], "2025-12-08T11:45:00+07:00")
         self.assertEqual(data2["updated_at"], "2025-12-08T11:45:00+07:00")
         self.assertFalse(data2["is_default"])
+        
+        self.assertEqual(data["latitude"], "-8.5899")
+        self.assertEqual(data["longitude"], "116.1107")
 
         self.assertEqual(data2["user"]["id"], 2)
         self.assertEqual(data2["user"]["username"], "test2")
@@ -211,6 +226,9 @@ class TestAddress(TransactionTestCase):
         self.assertEqual(data["created_at"], "2025-12-08T11:45:00+07:00")
         self.assertEqual(data["updated_at"], "2025-12-08T11:45:00+07:00")
         self.assertTrue(data["is_default"])
+        
+        self.assertEqual(data["latitude"], "-8.5899")
+        self.assertEqual(data["longitude"], "116.1107")
 
         self.assertEqual(data["user"]["id"], 1)
         self.assertEqual(data["user"]["username"], "test")
@@ -244,6 +262,8 @@ class TestAddress(TransactionTestCase):
                 "zip_code": "83121",
                 "street_address": "Jl. Post",
                 "is_default": True,
+                "latitude": -8.5899,
+                "longitude": 116.1107
             },
         )
 
@@ -371,6 +391,8 @@ class TestAddress(TransactionTestCase):
                 "zip_code": "83127",
                 "street_address": "Jl. Put",
                 "is_default": True,
+                "latitude": -8.6019,
+                "longitude": 116.1033
             },
         )
 
@@ -416,6 +438,8 @@ class TestAddress(TransactionTestCase):
                 "zip_code": "83121",
                 "street_address": "Jl. Put",
                 "is_default": True,
+                "latitude": -8.5899,
+                "longitude": 116.1107
             },
         )
 
@@ -462,6 +486,8 @@ class TestAddress(TransactionTestCase):
                 "zip_code": "83121",
                 "street_address": "Jl. Put",
                 "is_default": True,
+                "latitude": -8.5899,
+                "longitude": 116.1107
             },
         )
 

@@ -66,6 +66,8 @@ class ShippingAddressSerializer(serializers.ModelSerializer):
             "district_name",
             "subdistrict_name",
             "zip_code",
+            "latitude",
+            "longitude",
             "is_default",
             "created_at",
             "updated_at",

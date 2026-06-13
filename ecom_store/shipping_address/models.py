@@ -47,6 +47,16 @@ class ShippingAddress(BaseModel):
     is_default = models.BooleanField(default=False)
     destination_id = models.IntegerField()
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    
+    latitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+    )
+
+    longitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+    )
 
     def clean(self):
         errors = {}
@@ -80,6 +90,10 @@ class ShippingAddress(BaseModel):
 
         # Filter jika ada data yang None/Kosong agar tidak muncul koma berlebih
         return ", ".join([str(p) for p in address_parts if p])
+        
+    @property
+    def get_coordinates(self):
+        return f"{self.latitude},{self.longitude}"
 
     class Meta:
         # unique_together = (
