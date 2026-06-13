@@ -24,13 +24,13 @@ class Command(BaseCommand):
             Product.objects.create(
                 variant_name=f"Variant Sample Product {i}",
                 name=f"Sample Product {i}",
-                price=random.randint(10000, 200000),
+                price=10_000*i,
                 category=category,
                 stock=50,
-                weight=random.randint(500, 1000),
-                height=random.randint(2, 8),
-                width=random.randint(2, 10),
-                length=random.randint(5, 50),
+                weight=500*i,
+                height=2+i,
+                width=2+i,
+                length=5*i,
             )
 
         self.stdout.write(self.style.SUCCESS("10 sample products created"))
