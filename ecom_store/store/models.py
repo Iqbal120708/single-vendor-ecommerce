@@ -14,6 +14,20 @@ class Store(BaseModel):
     phone_number = PhoneNumberField(unique=True)
     shipping_address = models.ForeignKey(ShippingAddress, on_delete=models.PROTECT)
     is_active = models.BooleanField(default=True)
+    enable_insurance = models.BooleanField(
+        default=True,
+        help_text="Aktifkan atau nonaktifkan asuransi pengiriman otomatis."
+    )
+    
+    insurance_threshold = models.PositiveIntegerField(
+        default=300_000,
+        help_text="Minimal total produk agar asuransi diterapkan."
+    )
+    
+    insurance_paid_by_customer = models.BooleanField(
+        default=True,
+        help_text="Tentukan apakah biaya asuransi dibebankan kepada pembeli."
+    )
 
     @property
     def clean_phone_number(self):
@@ -40,3 +54,8 @@ class Store(BaseModel):
         
     def __str__(self):
         return self.name
+
+class StoreShippingOption(models.Model):
+    store = models.ForeignKey(Store, on_delete=models.CASCADE)
+    shipping_name = models.CharField(max_length=20)  # jne, jnt, sicepat
+    is_active = models.BooleanField(default=True)
