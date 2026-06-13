@@ -1,17 +1,25 @@
 from django.core.validators import MinValueValidator
 from rest_framework import serializers
-
+from decimal import Decimal
 from .models import Order, OrderItem
 
 
 class ShippingSerializer(serializers.Serializer):
     checkout_id = serializers.CharField(max_length=36)
-    code = serializers.CharField(max_length=20)
-    # name = serializers.CharField(max_length=50)
-    service = serializers.CharField(max_length=20)
-    # description = serializers.CharField(max_length=255)
-    cost = serializers.IntegerField(validators=[MinValueValidator(1)])
-    # etd = serializers.CharField(max_length=10)
+    shipping_name = serializers.CharField(max_length=20)
+    service_name = serializers.CharField(max_length=20)
+    shipping_cost = serializers.IntegerField(validators=[MinValueValidator(0)])
+    shipping_cashback = serializers.IntegerField(validators=[MinValueValidator(0)])
+    shipping_cost_net = serializers.IntegerField(validators=[MinValueValidator(0)])
+    shipping_weight = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=3,
+        validators=[MinValueValidator(Decimal("0"))],
+    )
+    service_fee = serializers.IntegerField(validators=[MinValueValidator(0)])
+    net_income = serializers.IntegerField(validators=[MinValueValidator(0)])
+    is_cod = serializers.BooleanField()
+    etd = serializers.CharField(max_length=10)
 
 
 class OrderItemSerializer(serializers.ModelSerializer):

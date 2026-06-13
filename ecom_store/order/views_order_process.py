@@ -4,22 +4,24 @@ from datetime import timedelta
 
 from django.core.cache import cache
 from django.db import transaction
-from django.http import JsonResponse
+#from django.http import JsonResponse
 from django.utils import timezone
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.core.exceptions import ValidationError
 
-from cart.models import Cart
 from config.midtrans import snap
 from store.models import Store
-
-from .models import CheckoutSession, Courier
+from product.models import Product
+from .models import CheckoutSession, Order
 from .serializers import ShippingSerializer
-from .utils import (create_order, create_order_item,
-                    fetch_shipping_rates_from_rajaongkir, get_destination)
+from .utils import (fetch_shipping_rates_from_rajaongkir, get_destination, get_valid_checkout, get_valid_carts)
 from .utils_midtrans import (InvalidMidtransPayload, InvalidMidtransSignature,
                              WebhookMidtrans)
+from .services.order import OrderService, OrderShippingService
+from config.exceptions import error_response
+from rest_framework.permissions import AllowAny
 
 logger = logging.getLogger("order")
 logger_error = logging.getLogger("order_error")
@@ -45,10 +47,6 @@ class CheckoutView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        carts = Cart.objects.filter(user=request.user, pk__in=cart_ids).select_related(
-            "product"
-        )
-
         store = Store.objects.filter(is_active=True).first()
         if not store:
             logger_error.error(
@@ -59,29 +57,9 @@ class CheckoutView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
 
-        origin = store.shipping_address
-
         shipping_address_id = request.data.get("shipping_address_id")
         destination = get_destination(request.user, shipping_address_id)
-        total_weight = sum([cart.product.weight * cart.qty for cart in carts])
-        couriers = Courier.objects.filter(is_active=True).values_list("code", flat=True)
-
-        payload = {
-            "origin": origin.district.ro_id,
-            "destination": destination.district.ro_id,
-            "weight": total_weight,
-            "courier": ":".join(list(couriers)),
-        }
-        try:
-            shipping_options = fetch_shipping_rates_from_rajaongkir(payload)
-        except serializers.ValidationError as e:
-            payload["event_type"] = "checkout"
-            logger_error.error(
-                f"Gagal mengambil ongkir RajaOngkir untuk User {request.user.id}. Error: {e.detail["error"]}",
-                extra=payload,
-            )
-            raise
-
+        
         checkout = CheckoutSession.objects.create(
             user=request.user,
             cart_ids=cart_ids,
@@ -89,74 +67,136 @@ class CheckoutView(APIView):
             store=store,
             expires_at=timezone.now() + timedelta(minutes=10),
         )
-
-        # checkout_id = str(uuid.uuid4())
-
-        # cache_key = f"shipping_payload_{request.user.id}_{checkout_id}"
-        # shipping_context= {
-        #     "origin_id": origin.city.ro_id,
-        #     "destination_id": destination.city.ro_id,
-        #     "origin": origin,
-        #     "destination": destination,
-        # }
-        # order_details = create_order_details(carts)
-        # # simpan payload di cache (misal 10 menit)
-        # cache.set(cache_key, [shipping_context, order_details, store.id], 600)
+        
+        carts = get_valid_carts(request.user, checkout.cart_ids)
+        
+        # validasi stock
+        try:
+            with transaction.atomic():
+                product_ids = carts.values_list("product__id", flat=True)
+                products = (
+                    Product.objects
+                    .select_for_update()
+                    .filter(id__in=product_ids)
+                    .order_by("id")
+                )
+                
+                products_map = {
+                    product.id: product
+                    for product in products
+                }
+            
+                for cart in carts:
+                    product = products_map[cart.product.id]
+            
+                    available_stock = (
+                        product.stock
+                        - product.reserved_stock
+                    )
+            
+                    if available_stock < cart.qty:
+                        raise ValidationError(
+                            f"Stok {product.name} tidak cukup"
+                        )
+                
+                    product.reserved_stock += cart.qty
+                    
+                Product.objects.bulk_update(
+                    products,
+                    ["reserved_stock"],
+                )
+            
+                service = OrderService(checkout, carts)
+                order = service.execute()
+                checkout.order = order
+                checkout.save(update_fields=["order"])
+        except Exception as e:
+            logger_error.error(
+                f"Gagal membuat order untuk user {request.user.id}: {e}",
+                extra={"checkout_id": checkout.id},
+            )
+            return error_response(
+                "Terjadi kesalahan saat membuat order.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+            
+            
         logger.info(
             f"Checkout Session {checkout.id} dibuat untuk User {request.user.id}. Data disimpan di model."
         )
-        return Response(
-            {"checkout_id": str(checkout.id), "shipping_options": shipping_options}
-        )
+        
+        return Response({"checkout_id": str(checkout.id)})
+        
 
+        
+class ShippingRates(APIView):
+    def post(self, request):
+        checkout_id = request.data.get("checkout_id")
+        is_cod = request.data.get("is_cod")
+        
+        checkout = get_valid_checkout(request.user, checkout_id)
+        
+        order_items = checkout.order.items.all()
+            
+        total_weight = sum([item.product.weight * item.qty for item in order_items])
+        total_price = sum([item.product.price * item.qty for item in order_items])
+
+        params = {
+            "shipper_destination_id": checkout.store.shipping_address.destination_id,
+            "receiver_destination_id": checkout.destination.destination_id,
+            "weight": total_weight/1000, # grams to kilograms
+            "item_value": int(total_price),
+            "cod": "yes" if is_cod else "no",
+            "origin_pin_point": checkout.store.shipping_address.get_coordinates,
+            "destination_pin_point": checkout.destination.get_coordinates
+        }
+        
+        try:
+            shipping_options = fetch_shipping_rates_from_rajaongkir(params, is_cod)
+        except serializers.ValidationError as e:
+            logger_error.error(
+                f"Gagal mengambil ongkir RajaOngkir untuk User {request.user.id}. Error: {e.detail["error"]}",
+                extra={
+                    "event_type": "shippingrates",
+                    "checkout_id": checkout.id,
+                    "weight": params["weight"],
+                    "item_value": params["item_value"],
+                },
+            )
+            raise
+        
+        return Response(
+            {"shipping_options": shipping_options}
+        )
 
 class TransactionView(APIView):
     def post(self, request):
         serializer = ShippingSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        checkout_id = serializer.data["checkout_id"]
         logger.info(
-            f"User {request.user.id} membuat transaksi untuk checkout_id: {checkout_id}"
+            f"User {request.user.id} membuat transaksi untuk checkout_id: {serializer.validated_data["checkout_id"]}"
         )
-
+        
+        checkout_id = serializer.validated_data.get("checkout_id")
+        checkout = get_valid_checkout(request.user, checkout_id)
+        
+        order = checkout.order
+        order_item = order.items.all().select_related("product")
+        
         try:
-            checkout = CheckoutSession.objects.select_related(
-                "destination", "store", "user"
-            ).get(id=checkout_id)
-        except CheckoutSession.DoesNotExist:
+            order_shipping = OrderShippingService(order, serializer.validated_data, checkout).execute()
+            order.refresh_from_db()
+        except Exception as e:
             logger_error.error(
-                "CheckoutSession not found",
-                extra={
-                    "event_type": "transaction",
-                    "checkout_id": checkout_id,
-                },
+                f"Gagal membuat order shipping untuk user {request.user.id}: {e}",
+                extra={"event_type": "transaction", "checkout_id": checkout.id, "order_id": order.order_id},
             )
-            return Response(
-                {"detail": "CheckoutSession tidak ditemukan"},
-                status=status.HTTP_404_NOT_FOUND,
+            return error_response(
+                "Terjadi kesalahan saat membuat order shipping.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
-        if timezone.now() >= checkout.expires_at:
-            return Response(
-                {
-                    "error": "Sesi telah berakhir atau tidak ditemukan. Silakan ulangi proses (Maks. 10 menit)."
-                },
-                status=status.HTTP_408_REQUEST_TIMEOUT,
-            )
-
-        # shipping_context, order_details, store_id = cache_data
-
-        # store = Store.objects.get(id=store_id)
-        # shipping_option = serializer.data
-
-        carts = Cart.objects.filter(
-            user=checkout.user, pk__in=checkout.cart_ids
-        ).select_related("product")
-
-        order = create_order(checkout, serializer.data)
-        order_item = create_order_item(order, carts)
-
+            
         item_details = []
 
         # Produk
@@ -174,29 +214,59 @@ class TransactionView(APIView):
         item_details.append(
             {
                 "id": "SHIPPING",
-                "price": order.shipping_cost - order.shipping_cashback,
+                "price": order.shipping.shipping_cost,
                 "quantity": 1,
-                "name": f"Ongkir {order.courier_code} {order.shipping_type}",
+                "name": f"Ongkir {order.shipping.shipping_name} {order.shipping.service_name}",
             }
         )
 
-        if order.insurance_value > 0:
+        if checkout.store.insurance_paid_by_customer and order.shipping.insurance_value > 0:
             item_details.append(
                 {
                     "id": "INSURANCE",
-                    "price": int(order.insurance_value),
+                    "price": int(order.shipping.insurance_value),
                     "quantity": 1,
                     "name": "Asuransi Pengiriman",
                 }
             )
+            
+        if order.shipping.additional_cost > 0:
+            item_details.append(
+                {
+                    "id": "ADDITIONAL COST",
+                    "price": int(order.shipping.additional_cost),
+                    "quantity": 1,
+                    "name": "Biaya Tambahan",
+                }
+            )
+            
+        if order.shipping.service_fee > 0:
+            item_details.append(
+                {
+                    "id": "SERVICE",
+                    "price": int(order.shipping.service_fee),
+                    "quantity": 1,
+                    "name": "Biaya Servis",
+                }
+            )
+            
 
         gross_amount = sum(item["price"] * item["quantity"] for item in item_details)
+        if gross_amount != order.grand_total:
+            logger_error.error(f"Mismatch gross_amount: {gross_amount} vs grand_total: {order.grand_total}, order_id: {order.order_id}")
+            return error_response("Terjadi kesalahan kalkulasi order.", status_code=500)
 
         transaction = {
             "transaction_details": {
                 "order_id": str(order.order_id),
                 "gross_amount": gross_amount,
             },
+            "enabled_payments": [
+                "gopay", "shopeepay", "qris",
+                "bank_transfer",
+                "cstore",
+                "echannel",
+            ],
             "item_details": item_details,
             "customer_details": {
                 "first_name": checkout.user.username,
@@ -218,52 +288,47 @@ import hashlib
 import json
 
 from django.conf import settings
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
+#from django.views.decorators.csrf import csrf_exempt
 
+class MidtransWebhookView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
 
-@csrf_exempt
-def midtrans_webhook(request):
-    webhook_midtrans = WebhookMidtrans()
-
-    try:
-        payload = webhook_midtrans.validate_signature(request.body)
-    except InvalidMidtransPayload as e:
-        return JsonResponse({"error": str(e)}, status=400)
-    except InvalidMidtransSignature as e:
-        return JsonResponse({"error": str(e)}, status=403)
-
-    logger.info(
-        f"User {request.user.id} sudah melakukan transaksi untuk order_id: {payload["order_id"]}"
-    )
-
-    with transaction.atomic():
-        try:
-            webhook_midtrans.get_order()
-        except:
-            return JsonResponse(
-                {"detail": "Order tidak ditemukan"}, status=status.HTTP_404_NOT_FOUND
-            )
+    def post(self, request):
+        webhook_midtrans = WebhookMidtrans()
 
         try:
-            webhook_midtrans.change_payment_status_order()
+            payload = webhook_midtrans.validate_signature(request.body)
+        except InvalidMidtransPayload as e:
+            return Response({"error": str(e)}, status=400)
+        except InvalidMidtransSignature as e:
+            return Response({"error": str(e)}, status=403)
+
+        logger.info(f"Webhook diterima untuk order_id: {payload['order_id']}")
+
+        try:
+            with transaction.atomic():
+                webhook_midtrans.get_order()
+                is_paid = webhook_midtrans.change_payment_status_order()
+        except (Order.DoesNotExist, ValidationError):
+            return Response({"detail": "Order tidak ditemukan"}, status=404)
         except Exception as e:
-            return Response({"detail": str(e)}, status=status.HTTP_200_OK)
+            logger_error.error(f"Webhook error: {e}")
+            return Response({"detail": "Terjadi kesalahan"}, status=500)
 
-        try:
-            webhook_midtrans.create_order_ro()
-            logger.info(
-                f"Berhasil membuat order RajaOngkir untuk user {request.user.id} dengan order id {payload["order_id"]}"
-            )
-            webhook_midtrans.update_order_from_rajaongkir_response()
-            webhook_midtrans.reduce_stock()
-        except Exception as e:
-            raise
+        if is_paid:
+            try:
+                with transaction.atomic():
+                    webhook_midtrans.reduce_stock()
+            except Exception:
+                logger_error.critical(
+                    "Order paid tapi reduce_stock gagal - butuh review manual",
+                    extra={"event_type": "transaction", "order_id": webhook_midtrans.order.order_id},
+                )
+                return Response({"detail": "Terjadi kesalahan"}, status=500)
 
-    logger.info(
-        f"Transaksi Midtrans untuk order id {payload["order_id"]} berhasil di proses"
-    )
+        logger.info(
+            f"Transaksi Midtrans untuk order id {payload['order_id']} berhasil di proses"
+        )
 
-    return JsonResponse(
-        {"detail": "Order berhasil diproses"}, status=status.HTTP_201_CREATED
-    )
+        return Response({"detail": "OK"}, status=200)

@@ -3,7 +3,7 @@ import json
 import logging
 
 from django.conf import settings
-
+from django.core.exceptions import ValidationError
 from .models import Order
 from .utils import fetch_order_rajaongkir, reduce_product_stock
 
@@ -35,7 +35,6 @@ class WebhookMidtrans:
 
         if signature != expected_signature:
             raise InvalidMidtransSignature("Invalid Midtrans signature")
-
         return self.payload
 
     def get_order(self):
@@ -45,7 +44,7 @@ class WebhookMidtrans:
                 .prefetch_related("items__product")
                 .get(order_id=self.payload.get("order_id"))
             )
-        except Order.DoesNotExist as e:
+        except (Order.DoesNotExist, ValidationError) as e:
             logger_error.error(
                 "Order not found",
                 extra={
@@ -59,15 +58,13 @@ class WebhookMidtrans:
     def change_payment_status_order(self):
         transaction_status = self.payload.get("transaction_status")
         fraud_status = self.payload.get("fraud_status")
-
+    
         if transaction_status in ["settlement", "capture"]:
             if fraud_status == "accept":
                 self.order.payment_status = "paid"
         elif transaction_status in ["deny", "cancel", "expire"]:
             self.order.payment_status = "failed"
-        elif transaction_status == "refund":
-            self.order.payment_status = "refunded"
-
+    
         if self.order.payment_status != "paid":
             logger_error.info(
                 "Payment not completed",
@@ -75,58 +72,20 @@ class WebhookMidtrans:
                     "event_type": "transaction",
                     "order_id": self.order.order_id,
                     "transaction_status": transaction_status,
+                    "fraud_status": fraud_status,
                 },
             )
-            self.order.save()
-
-            raise Exception("Payment not completed.")
-
-    def create_order_ro(self):
-        try:
-            self.res = fetch_order_rajaongkir(self.order)
-        except Exception as e:
-            logger_error.exception(
-                "Failed to call RajaOngkir API",
-                extra={
-                    "event_type": "transaction",
-                    "order_id": self.order.order_id,
-                },
-            )
-            raise
-
-        if self.res.status_code != 201:
-            logger_error.error(
-                "RajaOngkir order creation failed",
-                extra={
-                    "event_type": "transaction",
-                    "order_id": self.order.order_id,
-                    "status_code": self.res.status_code,
-                    "response": self.res.text,
-                },
-            )
-            raise Exception("RajaOngkir order creation failed")
-
-    def update_order_from_rajaongkir_response(self):
-        try:
-            data = self.res.json()["data"]
-        except (ValueError, KeyError) as e:
-            logger_error.exception(
-                "Invalid RajaOngkir response format",
-                extra={
-                    "event_type": "transaction",
-                    "order_id": self.order.order_id,
-                    "response": self.res.text,
-                },
-            )
-            raise
-
-        self.order.order_id_ro = data["order_id"]
-        self.order.order_no_ro = data["order_no"]
-        self.order.save()
-
+    
+        self.order.save(update_fields=["payment_status"])
+        return self.order.payment_status == "paid"
+            
+            
     def reduce_stock(self):
         try:
-            reduce_product_stock(self.order.items.all())
+            if not self.order.reduced_stock:
+                reduce_product_stock(self.order.items.all())
+                self.order.reduced_stock = True
+                self.order.save(update_fields=["reduced_stock"])
         except Exception as e:
             logger_error.exception(
                 "Failed to reserve stock",
@@ -136,3 +95,48 @@ class WebhookMidtrans:
                 },
             )
             raise
+
+    # def create_order_ro(self):
+    #     try:
+    #         self.res = fetch_order_rajaongkir(self.order)
+    #     except Exception as e:
+    #         logger_error.exception(
+    #             "Failed to call RajaOngkir API",
+    #             extra={
+    #                 "event_type": "transaction",
+    #                 "order_id": self.order.order_id,
+    #             },
+    #         )
+    #         raise
+
+    #     if self.res.status_code != 201:
+    #         logger_error.error(
+    #             "RajaOngkir order creation failed",
+    #             extra={
+    #                 "event_type": "transaction",
+    #                 "order_id": self.order.order_id,
+    #                 "status_code": self.res.status_code,
+    #                 "response": self.res.text,
+    #             },
+    #         )
+    #         raise Exception("RajaOngkir order creation failed")
+
+    # def update_order_from_rajaongkir_response(self):
+    #     try:
+    #         data = self.res.json()["data"]
+    #     except (ValueError, KeyError) as e:
+    #         logger_error.exception(
+    #             "Invalid RajaOngkir response format",
+    #             extra={
+    #                 "event_type": "transaction",
+    #                 "order_id": self.order.order_id,
+    #                 "response": self.res.text,
+    #             },
+    #         )
+    #         raise
+
+    #     self.order.order_id_ro = data["order_id"]
+    #     self.order.order_no_ro = data["order_no"]
+    #     self.order.save()
+
+    

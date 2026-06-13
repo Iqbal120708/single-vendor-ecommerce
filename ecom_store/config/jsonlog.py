@@ -39,18 +39,22 @@ class JSONFormatter(logging.Formatter):
                 }
             )
 
-        elif event_type == "checkout":
+        elif event_type == "shippingrates":
+            if hasattr(record, "checkout_id"):
+                log_record["checkout_id"] = record.checkout_id
+            if hasattr(record, "order_id"):
+                log_record["order_id"] = record.order_id
+                
             log_record.update(
                 {
-                    "origin": getattr(record, "origin", None),
-                    "destination": getattr(record, "destination", None),
+                    "item_value": getattr(record, "item_value", None),
                     "weight": getattr(record, "weight", None),
-                    "courier": getattr(record, "courier", None),
                 }
             )
 
         elif event_type == "transaction":
-            log_record["order_id"] = getattr(record, "order_id", None)
+            if "order_id" not in log_record:
+                log_record["order_id"] = getattr(record, "order_id", None)
 
             if hasattr(record, "payload"):
                 log_record["payload"] = record.payload
@@ -60,11 +64,14 @@ class JSONFormatter(logging.Formatter):
 
             if hasattr(record, "transaction_status"):
                 log_record["transaction_status"] = record.transaction_status
+                
+            if hasattr(record, "fraud_status"):
+                log_record["fraud_status"] = record.fraud_status
 
             if hasattr(record, "response"):
                 log_record["response"] = record.response
 
             if hasattr(record, "checkout_id"):
                 log_record["checkout_id"] = record.checkout_id
-
+                
         return json.dumps(log_record)
