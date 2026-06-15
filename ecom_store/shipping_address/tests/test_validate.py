@@ -2,16 +2,22 @@ from unittest.mock import patch
 
 from allauth.account.models import EmailAddress
 from django.contrib.auth import get_user_model
+
 # from rest_framework.test import APIClient
 from django.core.exceptions import ValidationError
+
 # from django.db import connection
 # from django.test import TransactionTestCase
 from django.urls import reverse
 from freezegun import freeze_time
 from rest_framework.test import APITestCase
-
-from shipping_address.models import (City, District, Province, ShippingAddress,
-                                     SubDistrict)
+from shipping_address.models import (
+    City,
+    District,
+    Province,
+    ShippingAddress,
+    SubDistrict,
+)
 
 User = get_user_model()
 

@@ -1,6 +1,5 @@
-from django.db import models
-
 from config.models import BaseModel
+from django.db import models
 
 
 class Category(BaseModel):

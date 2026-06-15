@@ -4,6 +4,7 @@ from unittest.mock import patch
 from allauth.account.models import EmailAddress
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
+
 # from django.db import connection
 from django.test import TransactionTestCase, override_settings
 from django.urls import reverse

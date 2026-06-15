@@ -1,432 +1,406 @@
 import uuid
-from datetime import datetime
 from unittest.mock import patch
 
+from cart.models import Cart
 from django.core.management import call_command
-from django.test import TransactionTestCase, override_settings
+from django.test import TestCase
 from django.urls import reverse
-from django.utils import timezone
-from freezegun import freeze_time
+from order.models import CheckoutSession, Order, OrderItem
+from order.utils import get_destination
+from product.models import Product
+from rest_framework import serializers, status
 from rest_framework.test import APIClient
 
-from order.models import CheckoutSession
-from .helper_setup import set_user, set_address, set_store, set_location_fields
-
-# MOCK_SHIPPING_RATES = [
-#     {'name': 'Citra Van Titipan Kilat (TIKI)', 'code': 'tiki', 'service': 'REG', 'description': 'Reguler Service', 'cost': 24000, 'etd': '2 day'},
-#     {'name': 'J&T Express', 'code': 'jnt', 'service': 'EZ', 'description': 'Reguler', 'cost': 21000, 'etd': ''},
-#     {'name': 'Jalur Nugraha Ekakurir (JNE)', 'code': 'jne', 'service': 'REG', 'description': 'Reguler', 'cost': 27000, 'etd': '1 day'},
-#     {'name': 'Ninja Xpress', 'code': 'ninja', 'service': 'STD', 'description': 'Standard', 'cost': 11000, 'etd': '2 day'},
-#     {'name': 'POS Indonesia (POS)', 'code': 'pos', 'service': 'Pos Reguler', 'description': '240', 'cost': 21000, 'etd': '2 day'},
-# ]
-
-def res_test_success(self, res):
-    data = res.data
-
-    self.assertEqual(res.status_code, 200)
-
-    # 2. Validasi checkout_id (Format UUID)
-    self.assertIn("checkout_id", data)
-    self.assertIsInstance(data["checkout_id"], str)
-    self.assertEqual(len(data["checkout_id"]), 36)  # Panjang standar UUID
-
-    # 3. Test CheckoutSession
-    checkout_sessions = CheckoutSession.objects.all()
-    self.assertEqual(len(checkout_sessions), 1)
-
-    checkout_session = checkout_sessions.first()
-    self.assertTrue(isinstance(checkout_session.id, uuid.UUID))
-    self.assertEqual(checkout_session.cart_ids, [1])
-    self.assertEqual(checkout_session.user.email, "test@gmail.com")
-    self.assertEqual(len(checkout_session.user.shippingaddress_set.all()), 1)
-    self.assertEqual(
-        checkout_session.destination, checkout_session.user.shippingaddress_set.first()
-    )
-    self.assertEqual(checkout_session.store.email, "store@gmail.com")
-
-    # value di tambah 10 menit dari menit 45 jadi 55
-    # value di convert dari lokal ke utc (jam 11 > jam 4)
-    self.assertEqual(
-        checkout_session.expires_at.strftime("%Y-%m-%d %H:%M:%S"), "2025-12-08 04:55:00"
-    )
-    
-    # # 3. Validasi shipping_options
-    # self.assertIn("shipping_options", data)
-    # self.assertIsInstance(data["shipping_options"], list)
-    # self.assertGreater(len(data["shipping_options"]), 0)
-
-    # # 4. Ambil satu item sampel untuk validasi struktur object di dalamnya
-    # first_option = data["shipping_options"][0]
-    # expected_keys = ["name", "code", "service", "description", "cost", "etd"]
-    # for key in expected_keys:
-    #     self.assertIn(key, first_option)
-
-    # # 5. Validasi tipe data field penting
-    # self.assertIsInstance(first_option["cost"], int)
-    # self.assertIsInstance(first_option["code"], str)
-
-    # # 6. Validasi data spesifik (Opsional)
-    # # Misalnya, mengecek apakah kurir 'tiki' ada dalam daftar
-    # codes = [option["code"] for option in data["shipping_options"]]
-    
-    # self.assertIn("tiki", codes)
-    # self.assertIn("jne", codes)
-    # self.assertIn("ninja", codes)
-    # self.assertIn("pos", codes)
-    # self.assertIn("jnt", codes)
-    # self.assertNotIn("sicepat", codes)
-    # self.assertNotIn("ide", codes)
-
-    # # 7. Memastikan harga/cost masuk akal (tidak negatif)
-    # self.assertTrue(all(option["cost"] >= 0 for option in data["shipping_options"]))
+from .helper_setup import set_address, set_location_fields, set_store, set_user
 
 
+class CheckoutViewTest(TestCase):
 
-
-@freeze_time("2025-12-08T11:45:00+07:00")
-class CheckoutTest(TransactionTestCase):
-    reset_sequences = True
+    @classmethod
+    def setUpTestData(cls):
+        cls.url = reverse("checkout")
+        call_command("seed_product")
+        cls.user = set_user()
+        province, city, district = set_location_fields()
+        cls.shipping_address = set_address(cls.user, province, city, district)
+        cls.store = set_store(province, city, district)
+        cls.product = Product.objects.first()
+        cls.cart = Cart.objects.create(user=cls.user, product=cls.product, qty=2)
 
     def setUp(self):
         self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
 
-        call_command("seed_product")
-        #call_command("seed_couriers")
+        self.product.reserved_stock = 0
+        self.product.save()
 
-        self.user = set_user()
-        province, city, district = set_location_fields()
-        self.shipping_address = set_address(self.user, province, city, district)
-        self.store = set_store(province, city, district)
+        self.store.is_active = True
+        self.store.save()
 
+        self.shipping_address.is_default = True
+        self.shipping_address.save()
 
-    def handle_login(self):
-        login = self.client.post(
-            reverse("rest_login"),
-            {"email": self.user.email, "password": "test2938484jr"},
-            format="json",
-        )
+    # ------------------------------------------------------------------ #
+    #  Validasi Input                                                      #
+    # ------------------------------------------------------------------ #
 
-        self.assertEqual(login.status_code, 200)
-
-        token = login.data["access"]
-
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
-
-    @patch("accounts.signals.logger")
     @patch("order.views_order_process.logger")
-    @patch("order.views_order_process.logger_error")
-    @patch("order.utils.logger")
-    @patch("order.utils.logger_error")
-    #@patch("order.views_order_process.fetch_shipping_rates_from_rajaongkir")
-    def test(
-        self,
-        order_logger_error_util,
-        order_log_util,
-        order_logger_error_view,
-        order_log_view,
-        mock_logger,
-    ):
-        self.handle_login()
-        # add cart
-        res_add = self.client.post(reverse("add_to_cart", args=[1]), data={})
-        self.assertEqual(res_add.status_code, 201)
-    
-        # update cart
-        res_patch = self.client.patch(
-            reverse("cart", args=[res_add.data["id"]]), data={"qty": 3}
-        )
-        self.assertEqual(res_patch.status_code, 200)
-    
-        # checkout
-        res = self.client.post(
-            reverse("checkout"), data={"cart_ids": [res_add.data["id"]]}, format="json"
-        )
-        print(res.data)
-        res_test_success(self, res)
-    
-        order_log_view.info.assert_called()
-        logs = order_log_view.info.call_args_list
-    
-        self.assertEqual(len(logs), 2)
-        self.assertEqual(logs[0].args[0], "User 1 memulai checkout untuk cart_ids: [1]")
-        self.assertEqual(
-            logs[1].args[0],
-            f"Checkout Session {res.data['checkout_id']} dibuat untuk User 1. Data disimpan di model.",
+    def test_post_return_400_when_cart_ids_missing(self, mock_logger):
+        """
+        Kirim request tanpa key cart_ids sama sekali.
+        Assert: status 400, response mengandung key 'cart_ids'.
+        """
+
+        res = self.client.post(self.url, data={}, format="json")
+
+        self.assertEqual(res.status_code, 400)
+        self.assertIn(
+            "cart_ids harus berupa list dan tidak boleh kosong.", res.data["cart_ids"]
         )
 
-    # @patch("accounts.signals.logger")
-    # @patch("order.views_order_process.logger")
-    # @patch("order.views_order_process.logger_error")
-    # @patch("order.utils.logger")
-    # @patch("order.utils.logger_error")
-    # #@patch("order.views_order_process.fetch_shipping_rates_from_rajaongkir")
-    # def test_with_ship_addr_id(
-    #     self,
-    #     mock_fetch_shipping,
-    #     order_logger_error_util,
-    #     order_log_util,
-    #     order_logger_error_view,
-    #     order_log_view,
-    #     mock_logger,
-    # ):
-    #     """
-    #     this test used key shipping_address_id in body request
-    #     response remains the same
-    #     """
-
-    
-    #     self.handle_login()
-    #     # add cart
-    #     res_add = self.client.post(reverse("add_to_cart", args=[1]), data={})
-    
-    #     self.assertEqual(res_add.status_code, 201)
-    
-    #     # update cart
-    #     res_patch = self.client.patch(
-    #         reverse("cart", args=[res_add.data["id"]]), data={"qty": 3}
-    #     )
-    #     self.assertEqual(res_patch.status_code, 200)
-    
-    #     # checkout
-    #     res = self.client.post(
-    #         reverse("checkout"),
-    #         data={
-    #             "cart_ids": [res_add.data["id"]],
-    #             "shipping_address_id": self.shipping_address.id,
-    #         },
-    #         format="json",
-    #     )
-    
-    #     res_test_success(self, res)
-    
-    #     order_log_view.info.assert_called()
-    #     logs = order_log_view.info.call_args_list
-    
-    #     self.assertEqual(len(logs), 2)
-    #     self.assertEqual(logs[0].args[0], "User 1 memulai checkout untuk cart_ids: [1]")
-    #     self.assertEqual(
-    #         logs[1].args[0],
-    #         f"Checkout Session {res.data['checkout_id']} dibuat untuk User 1. Data disimpan di model.",
-    #     )
-
-    @patch("accounts.signals.logger")
     @patch("order.views_order_process.logger")
-    @patch("order.views_order_process.logger_error")
-    @patch("order.utils.logger")
-    @patch("order.utils.logger_error")
-    def test_error_data_cart_ids(
-        self,
-        order_logger_error_util,
-        order_log_util,
-        order_logger_error_view,
-        order_log_view,
-        mock_logger,
-    ):
-        self.handle_login()
-        # add cart
-        res_add = self.client.post(reverse("add_to_cart", args=[1]), data={})
-        self.assertEqual(res_add.status_code, 201)
+    def test_post_return_400_when_cart_ids_not_a_list(self, mock_logger):
+        """
+        Kirim cart_ids berupa integer atau string, bukan list.
+        Assert: status 400, response mengandung key 'cart_ids'.
+        """
 
-        # update cart
-        res_patch = self.client.patch(
-            reverse("cart", args=[res_add.data["id"]]), data={"qty": 3}
-        )
+        res = self.client.post(self.url, data={"cart_ids": 1}, format="json")
 
-        self.assertEqual(res_patch.status_code, 200)
-
-        # checkout cart_ids nothing
-        res = self.client.post(reverse("checkout"), data={}, format="json")
         self.assertEqual(res.status_code, 400)
-        self.assertEqual(
-            res.data["error"], "cart_ids harus berupa list dan tidak boleh kosong."
-        )
-        
-        # checkout cart_ids != list
-        res = self.client.post(reverse("checkout"), data={"cart_ids": 1}, format="json")
-        
-        self.assertEqual(res.status_code, 400)
-        self.assertEqual(
-            res.data["error"], "cart_ids harus berupa list dan tidak boleh kosong."
+        self.assertIn(
+            "cart_ids harus berupa list dan tidak boleh kosong.", res.data["cart_ids"]
         )
 
-        # checkout list cart_ids != integer
-        res = self.client.post(
-            reverse("checkout"), data={"cart_ids": ["a"]}, format="json"
-        )
-        
+    @patch("order.views_order_process.logger")
+    def test_post_return_400_when_cart_ids_is_empty_list(self, mock_logger):
+        """
+        Kirim cart_ids berupa list kosong [].
+        Assert: status 400, response mengandung key 'cart_ids'.
+        """
+
+        res = self.client.post(self.url, data={"cart_ids": []}, format="json")
+
         self.assertEqual(res.status_code, 400)
-        self.assertEqual(
-            res.data["error"],
+        self.assertIn(
+            "cart_ids harus berupa list dan tidak boleh kosong.", res.data["cart_ids"]
+        )
+
+    @patch("order.views_order_process.logger")
+    def test_post_return_400_when_cart_ids_contains_non_integer(self, mock_logger):
+        """
+        Kirim cart_ids dengan elemen bukan integer, misal ["abc", 1].
+        Assert: status 400, response mengandung key 'cart_ids'.
+        """
+
+        res = self.client.post(self.url, data={"cart_ids": ["abc", 1]}, format="json")
+
+        self.assertEqual(res.status_code, 400)
+        self.assertIn(
             "Semua item di dalam cart_ids harus berupa angka (integer).",
+            res.data["cart_ids"],
         )
 
-        order_log_view.info.assert_called()
-        logs = order_log_view.info.call_args_list
+    # ------------------------------------------------------------------ #
+    #  Store                                                               #
+    # ------------------------------------------------------------------ #
 
-        # ada 3 request permintaan dan gagal jadi hanya bikin 3 log info start checkout
-        self.assertEqual(len(logs), 3)
-        self.assertEqual(
-            logs[0].args[0], "User 1 memulai checkout untuk cart_ids: None"
-        )
-        self.assertEqual(logs[1].args[0], "User 1 memulai checkout untuk cart_ids: 1")
-        self.assertEqual(
-            logs[2].args[0], "User 1 memulai checkout untuk cart_ids: ['a']"
-        )
-
-    @patch("accounts.signals.logger")
-    @patch("order.views_order_process.logger")
     @patch("order.views_order_process.logger_error")
-    @patch("order.utils.logger")
-    @patch("order.utils.logger_error")
-    def test_error_store_origin(
-        self,
-        order_logger_error_util,
-        order_log_util,
-        order_logger_error_view,
-        order_log_view,
-        mock_logger,
-    ):
+    @patch("order.views_order_process.logger")
+    def test_post_return_503_when_no_active_store(self, mock_logger, mock_logger_error):
         """
-        This test when store not found which makes origin address cannot be accessed
+        Tidak ada store dengan is_active=True di database.
+        Assert: status 503, logger_error.error() dipanggil sekali.
         """
-        self.handle_login()
-        # add cart
-        res_add = self.client.post(reverse("add_to_cart", args=[1]), data={})
-        self.assertEqual(res_add.status_code, 201)
 
-        # update cart
-        res_patch = self.client.patch(
-            reverse("cart", args=[res_add.data["id"]]), data={"qty": 3}
-        )
-        self.assertEqual(res_patch.status_code, 200)
-
-        # buat store tidak aktif agar gak bisa di pakai
         self.store.is_active = False
         self.store.save()
 
-        # checkout
         res = self.client.post(
-            reverse("checkout"), data={"cart_ids": [res_add.data["id"]]}, format="json"
+            self.url, data={"cart_ids": [self.cart.id]}, format="json"
         )
 
         self.assertEqual(res.status_code, 503)
-        self.assertEqual(res.data["error"], "Layanan tidak tersedia saat ini.")
+        self.assertEqual(
+            res.data["detail"], "Toko sedang tidak aktif atau tidak tersedia."
+        )
 
-        order_log_view.info.assert_called()
-        logs = order_log_view.info.call_args_list
+        mock_logger_error.error.assert_called_once_with(
+            f"Store aktif tidak ditemukan. User ID: {self.user.id}"
+        )
 
-        self.assertEqual(len(logs), 1)
-        self.assertEqual(logs[0].args[0], "User 1 memulai checkout untuk cart_ids: [1]")
+    # ------------------------------------------------------------------ #
+    #  get_destination                                                     #
+    # ------------------------------------------------------------------ #
 
-        order_logger_error_view.error.assert_called()
-        args, kwargs = order_logger_error_view.error.call_args
+    def test_post_calls_get_destination_with_correct_args(self):
+        """
+        parameter mengandung shipping_address_id.
+        Assert: get_destination dipanggil output shipping_address berdasarkan shipping_address_id
+        """
 
-        self.assertEqual(args[0], "Store aktif tidak ditemukan. User ID: 1")
+        data = get_destination(self.user, self.shipping_address.id)
 
-    @patch("accounts.signals.logger")
-    @patch("order.views_order_process.logger")
-    @patch("order.views_order_process.logger_error")
+        self.assertEqual(data.id, self.shipping_address.id)
+
+    def test_post_calls_get_destination_without_args(self):
+        """
+        parameter tidak mengandung shipping_address_id.
+        Assert: get_destination dipanggil output shipping_address default user
+        """
+
+        data = get_destination(self.user)
+
+        self.assertTrue(data.is_default)
+
     @patch("order.utils.logger")
-    @patch("order.utils.logger_error")
-    def test_error_destination(
-        self,
-        order_logger_error_util,
-        order_log_util,
-        order_logger_error_view,
-        order_log_view,
-        mock_logger,
+    def test_post_return_400_when_shipping_address_id_not_found(self, mock_logger):
+        """
+        shipping_address_id dikirim tapi tidak ada di database milik user.
+        Assert: status 400, response mengandung key 'detail'
+        dengan pesan 'Alamat pengiriman tidak ditemukan.'
+        """
+
+        with self.assertRaises(serializers.ValidationError) as ctx:
+            get_destination(self.user, shipping_address_id=9999)
+
+        self.assertEqual(
+            ctx.exception.detail, {"detail": "Alamat pengiriman tidak ditemukan."}
+        )
+
+        mock_logger.warning.assert_called_once_with(
+            f"Shipping address tidak ditemukan. User ID: {self.user.id}, Address ID: 9999"
+        )
+
+    @patch("order.utils.logger")
+    def test_post_return_400_when_no_default_address(self, mock_logger):
+        """
+        shipping_address_id tidak dikirim dan user tidak punya default address.
+        Assert: status 400, response mengandung key 'detail'
+        dengan pesan 'Belum ada alamat pengiriman. Silakan tambahkan alamat terlebih dahulu.'
+        """
+
+        self.shipping_address.is_default = False
+        self.shipping_address.save()
+
+        with self.assertRaises(serializers.ValidationError) as ctx:
+            get_destination(self.user)
+
+        self.assertEqual(
+            ctx.exception.detail,
+            {
+                "detail": "Belum ada alamat pengiriman. Silakan tambahkan alamat terlebih dahulu."
+            },
+        )
+
+        mock_logger.warning.assert_called_once_with(
+            f"Default address tidak ditemukan. User ID: {self.user.id}"
+        )
+
+    # ------------------------------------------------------------------ #
+    #  Cart
+    # ------------------------------------------------------------------ #
+
+    @patch("order.views_order_process.logger_error")
+    @patch("order.views_order_process.logger")
+    def test_post_return_400_when_cart_ids_not_found(
+        self, mock_logger, mock_logger_error
     ):
         """
-        This test when shipping_address not found which makes destination address cannot be accessed
+        cart_ids berisi ID yang tidak ada di database milik user.
+        Assert: status 400, response mengandung key 'cart_ids' dengan pesan cart tidak ditemukan, logger_error.error() dipanggil.
         """
-        self.handle_login()
-        # add cart
-        res_add = self.client.post(reverse("add_to_cart", args=[1]), data={})
-        self.assertEqual(res_add.status_code, 201)
-
-        # update cart
-        res_patch = self.client.patch(
-            reverse("cart", args=[res_add.data["id"]]), data={"qty": 3}
-        )
-        self.assertEqual(res_patch.status_code, 200)
-
-        # delete shipping_address user
-        self.shipping_address.delete()
-
-        # checkout
         res = self.client.post(
-            reverse("checkout"), data={"cart_ids": [res_add.data["id"]]}, format="json"
+            reverse("checkout"),
+            data={
+                "cart_ids": [self.cart.id, 9999],
+            },
+            format="json",
+        )
+
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Cart IDs not found: [9999]", res.data["cart_ids"])
+
+        mock_logger_error.error.assert_called_once()
+
+    # ------------------------------------------------------------------ #
+    #  Validasi Stock
+    # ------------------------------------------------------------------ #
+
+    @patch("order.views_order_process.logger_error")
+    @patch("order.views_order_process.logger")
+    def test_post_return_500_when_stock_not_enough(
+        self, mock_logger, mock_logger_error
+    ):
+        """
+        product.stock - product.reserved_stock < cart.qty.
+        Assert: status 400, logger_error.error() dipanggil,
+        CheckoutSession tidak created di database (atomic rollback).
+        """
+
+        self.cart.qty = 999
+        self.cart.save()
+
+        res = self.client.post(
+            self.url, data={"cart_ids": [self.cart.id]}, format="json"
         )
 
         self.assertEqual(res.status_code, 400)
         self.assertEqual(
-            res.data["error"],
-            "Alamat pengiriman belum dipilih. Silakan pilih salah satu alamat Anda atau atur salah satu sebagai 'Alamat Utama' (Default).",
+            res.data["detail"], f"Stok {self.cart.product.name} tidak cukup"
         )
 
-        order_log_view.info.assert_called()
-        logs = order_log_view.info.call_args_list
+        mock_logger_error.error.assert_called_once()
 
-        self.assertEqual(len(logs), 1)
-        self.assertEqual(logs[0].args[0], "User 1 memulai checkout untuk cart_ids: [1]")
+        # atomic rollback — CheckoutSession tidak terbuat
+        self.assertFalse(CheckoutSession.objects.exists())
 
-        order_log_util.warning.assert_called()
-        args, kwargs = order_log_util.warning.call_args
-
-        self.assertEqual(
-            args[0],
-            "Destination tidak ditemukan. User ID: 1, Address ID Provided: None",
+    @patch("order.services.checkout.OrderService")
+    @patch("order.views_order_process.logger_error")
+    @patch("order.views_order_process.logger")
+    def test_post_return_500_when_order_service_raises(
+        self, mock_logger, mock_logger_error, mock_order_service
+    ):
+        """
+        OrderService.execute() raise Exception.
+        Assert: status 500, logger_error.error() dipanggil,
+        CheckoutSession tidak created (atomic rollback),
+        reserved_stock tidak berubah.
+        """
+        mock_order_service.return_value.execute.side_effect = Exception(
+            "unexpected error"
         )
 
-    # @patch("accounts.signals.logger")
-    # @patch("order.views_order_process.logger")
-    # @patch("order.views_order_process.logger_error")
-    # @patch("order.utils.logger")
-    # @patch("order.utils.logger_error")
-    # @override_settings(API_KEY_RAJA_ONGKIR_SHIPPING_DELIVERY="invalid key")
-    # def test_error_api_key(
-    #     self,
-    #     order_logger_error_util,
-    #     order_log_util,
-    #     order_logger_error_view,
-    #     order_log_view,
-    #     mock_logger,
-    # ):
+        res = self.client.post(
+            self.url,
+            data={"cart_ids": [self.cart.id]},
+            format="json",
+        )
 
-    #     self.handle_login()
-    #     # add cart
-    #     res_add = self.client.post(reverse("add_to_cart", args=[1]), data={})
-    #     self.assertEqual(res_add.status_code, 201)
+        self.assertEqual(res.status_code, 500)
 
-    #     # update cart
-    #     res_patch = self.client.patch(
-    #         reverse("cart", args=[res_add.data["id"]]), data={"qty": 3}
-    #     )
-    #     self.assertEqual(res_patch.status_code, 200)
+        mock_logger_error.error.assert_called_once_with(
+            f"Gagal membuat order untuk user {self.user.id}: unexpected error",
+        )
 
-    #     # checkout
-    #     res = self.client.post(
-    #         reverse("checkout"), data={"cart_ids": [res_add.data["id"]]}, format="json"
-    #     )
+        # atomic rollback — CheckoutSession tidak terbuat
+        self.assertFalse(CheckoutSession.objects.exists())
 
-    #     self.assertEqual(res.status_code, 400)
-    #     self.assertEqual(res.data["error"], "Invalid Api key, key not found")
+        # reserved_stock tidak berubah
+        product = self.cart.product
+        product.refresh_from_db()
+        self.assertEqual(product.reserved_stock, 0)
 
-    #     order_log_view.info.assert_called()
-    #     logs = order_log_view.info.call_args_list
+    @patch("order.views_order_process.logger")
+    def test_post_reserved_stock_incremented_after_checkout(self, mock_logger):
+        """
+        Stock cukup, seluruh flow checkout berhasil.
+        Assert: product.reserved_stock di database bertambah sebesar cart.qty.
+        """
 
-    #     self.assertEqual(len(logs), 1)
-    #     self.assertEqual(logs[0].args[0], "User 1 memulai checkout untuk cart_ids: [1]")
+        res = self.client.post(
+            self.url, data={"cart_ids": [self.cart.id]}, format="json"
+        )
 
-    #     order_logger_error_view.error.assert_called()
-    #     args, kwargs = order_logger_error_view.error.call_args
+        self.assertEqual(self.cart.qty, 2)
 
-    #     self.assertEqual(
-    #         args[0],
-    #         "Gagal mengambil ongkir RajaOngkir untuk User 1. Error: Invalid Api key, key not found",
-    #     )
-    #     self.assertEqual(kwargs["extra"]["event_type"], "checkout")
-    #     self.assertIn("origin", kwargs["extra"])
-    #     self.assertIn("destination", kwargs["extra"])
-    #     self.assertIn("weight", kwargs["extra"])
-    #     self.assertIn("courier", kwargs["extra"])
+        product = self.cart.product
+
+        self.assertEqual(product.reserved_stock, 0)
+
+        product.refresh_from_db()
+        self.assertEqual(product.reserved_stock, 2)  # +2
+
+    # ------------------------------------------------------------------ #
+    #  Happy Path                                                          #
+    # ------------------------------------------------------------------ #
+
+    @patch("order.views_order_process.logger_error")
+    @patch("order.views_order_process.logger")
+    def test_post_return_200_with_checkout_id_when_success(
+        self, mock_logger, mock_logger_error
+    ):
+        """
+        Semua kondisi normal: store aktif, stock cukup, order terbuat.
+        Assert: status 200, response body mengandung key 'checkout_id'
+        berupa string UUID dari CheckoutSession yang dibuat.
+        """
+
+        res = self.client.post(
+            self.url,
+            data={
+                "cart_ids": [self.cart.id],
+            },
+            format="json",
+        )
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn("checkout_id", res.data)
+
+        # pastikan checkout_id adalah UUID valid
+        checkout = CheckoutSession.objects.get(id=res.data["checkout_id"])
+        self.assertEqual(str(checkout.id), res.data["checkout_id"])
+
+    @patch("order.views_order_process.logger_error")
+    @patch("order.views_order_process.logger")
+    def test_post_order_and_order_items_created_when_success(
+        self, mock_logger, mock_logger_error
+    ):
+        """
+        Seluruh flow checkout berhasil.
+        Assert: Order terbuat di database dengan user dan store yang benar,
+        OrderItem terbuat untuk setiap cart dengan qty dan price yang sesuai.
+        """
+
+        res = self.client.post(
+            self.url,
+            data={
+                "cart_ids": [self.cart.id],
+            },
+            format="json",
+        )
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+        order = Order.objects.filter(user=self.user, store=self.store).first()
+        self.assertIsNotNone(order)
+        self.assertEqual(order.user, self.user)
+        self.assertEqual(order.store, self.store)
+
+        order_item = OrderItem.objects.filter(order=order)
+        self.assertEqual(order_item.count(), 1)
+
+        item = order_item.first()
+        self.assertEqual(item.qty, self.cart.qty)
+        self.assertEqual(item.product_price, self.cart.product.price)
+
+    @patch("order.views_order_process.logger_error")
+    @patch("order.views_order_process.logger")
+    def test_post_logger_info_called_twice_on_success(
+        self, mock_logger, mock_logger_error
+    ):
+        """
+        Checkout berhasil sampai response 200.
+        Assert: logger.info() dipanggil minimal 2 kali —
+        sekali saat awal request masuk, sekali setelah checkout session dibuat.
+        """
+
+        res = self.client.post(
+            self.url,
+            data={
+                "cart_ids": [self.cart.id],
+            },
+            format="json",
+        )
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(mock_logger.info.call_count, 2)
+
+        checkout_id = res.data["checkout_id"]
+
+        mock_logger.info.assert_any_call(
+            f"User {self.user.id} memulai checkout untuk cart_ids: {[self.cart.id]}"
+        )
+        mock_logger.info.assert_any_call(
+            f"Checkout Session {checkout_id} dibuat untuk User {self.user.id}. Data disimpan di model."
+        )

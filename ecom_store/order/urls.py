@@ -1,7 +1,11 @@
 from django.urls import path
 
-from .views_order_process import (CheckoutView, TransactionView,
-                                  MidtransWebhookView, ShippingRates)
+from .views_order_process import (
+    CheckoutView,
+    MidtransWebhookView,
+    ShippingRates,
+    TransactionView,
+)
 from .views_order_user import GetOrderByFilter, GetOrderDetail
 
 urlpatterns = [

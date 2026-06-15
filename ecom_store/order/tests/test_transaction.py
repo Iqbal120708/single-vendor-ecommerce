@@ -6,14 +6,14 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
+
 # from store.models import Store
 # from shipping_address.models import Province, City, District, SubDistrict, ShippingAddress
 from django.test import TransactionTestCase, override_settings
 from django.urls import reverse
 from freezegun import freeze_time
-from rest_framework.test import APIClient
-
 from order.models import Order
+from rest_framework.test import APIClient
 from store.models import Store
 
 User = get_user_model()
@@ -141,7 +141,7 @@ class TransactionTest(TransactionTestCase):
         self.assertTrue(order.destination_address)
 
         # 5. Test Boolean
-        #self.assertFalse(order.is_archived)
+        # self.assertFalse(order.is_archived)
 
         # 6. Test DateTime
         self.assertIsNone(order.delivered_at)

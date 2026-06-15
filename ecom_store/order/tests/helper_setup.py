@@ -1,21 +1,26 @@
 from allauth.account.models import EmailAddress
 from django.contrib.auth import get_user_model
-from shipping_address.models import (City, District, Province, ShippingAddress,
-                                     SubDistrict)
+from shipping_address.models import (
+    City,
+    District,
+    Province,
+    ShippingAddress,
+    SubDistrict,
+)
 from store.models import Store, StoreShippingOption
 
 User = get_user_model()
 
+
 def set_location_fields():
-    province = Province.objects.create(
-        ro_id=1, name="NUSA TENGGARA BARAT (NTB)"
-    )
-    
+    province = Province.objects.create(ro_id=1, name="NUSA TENGGARA BARAT (NTB)")
+
     city = City.objects.create(ro_id=1, name="MATARAM", province=province)
-    
+
     district = District.objects.create(ro_id=1, name="MATARAM", city=city)
-    
+
     return province, city, district
+
 
 def set_user():
     user = User.objects.create_user(
@@ -27,14 +32,15 @@ def set_user():
     EmailAddress.objects.create(
         user=user, email=user.email, verified=True, primary=True
     )
-    
+
     return user
-    
+
+
 def set_address(user, province, city, district):
     subdistrict = SubDistrict.objects.create(
         ro_id=1, name="MATARAM TIMUR", zip_code="83121", district=district
     )
-    
+
     shipping_address = ShippingAddress.objects.create(
         province=province,
         city=city,
@@ -47,14 +53,15 @@ def set_address(user, province, city, district):
         latitude=-8.5899,
         longitude=116.1107,
     )
-    
+
     return shipping_address
-    
+
+
 def set_store(province, city, district):
     subdistrict_2 = SubDistrict.objects.create(
         ro_id=2, name="PAGESANGAN", zip_code="83127", district=district
     )
-    
+
     # 1. Membuat Superuser
     superuser = User.objects.create_superuser(
         username="admin_test",
@@ -88,15 +95,13 @@ def set_store(province, city, district):
         phone_number="080987654321",
         shipping_address=shipping_address_2,
     )
-    
+
     return store
-    
+
+
 def set_store_shipping_option(store):
     data = []
     for name in ["jne", "jnt", "sicepat"]:
-        data.append(StoreShippingOption(
-            shipping_name=name,
-            store=store
-        ))
-        
+        data.append(StoreShippingOption(shipping_name=name, store=store))
+
     return StoreShippingOption.objects.bulk_create(data)

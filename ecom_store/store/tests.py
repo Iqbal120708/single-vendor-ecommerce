@@ -4,9 +4,13 @@ from allauth.account.models import EmailAddress
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from rest_framework.test import APITestCase
-
-from shipping_address.models import (City, District, Province, ShippingAddress,
-                                     SubDistrict)
+from shipping_address.models import (
+    City,
+    District,
+    Province,
+    ShippingAddress,
+    SubDistrict,
+)
 from store.models import Store
 
 User = get_user_model()

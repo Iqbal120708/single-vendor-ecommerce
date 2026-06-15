@@ -1,6 +1,8 @@
+from decimal import Decimal
+
 from django.core.validators import MinValueValidator
 from rest_framework import serializers
-from decimal import Decimal
+
 from .models import Order, OrderItem
 
 

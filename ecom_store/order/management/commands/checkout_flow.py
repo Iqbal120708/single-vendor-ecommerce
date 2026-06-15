@@ -1,23 +1,33 @@
 from datetime import timedelta
+
+from allauth.account.models import EmailAddress
+from cart.models import Cart
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.urls import reverse
 from django.utils import timezone
-from rest_framework.test import APIClient
-
 from order.models import CheckoutSession, Order, OrderItem
-from cart.models import Cart
-from product.models import Product
 from order.tests.helper_setup import (
-    set_user, set_location_fields, set_address, set_store, set_store_shipping_option
+    set_address,
+    set_location_fields,
+    set_store,
+    set_store_shipping_option,
+    set_user,
 )
-from allauth.account.models import EmailAddress
-from django.contrib.auth import get_user_model
-from shipping_address.models import (City, District, Province, ShippingAddress,
-                                     SubDistrict)
+from product.models import Product
+from rest_framework.test import APIClient
+from shipping_address.models import (
+    City,
+    District,
+    Province,
+    ShippingAddress,
+    SubDistrict,
+)
 from store.models import Store, StoreShippingOption
 
 User = get_user_model()
+
 
 class Command(BaseCommand):
     help = "Buat checkout flow real ke dev DB untuk dapat order_id buat test webhook Midtrans"
@@ -41,8 +51,7 @@ class Command(BaseCommand):
         self.stdout.write("Semua data direset.")
 
         call_command("seed_product")
-        
-        
+
         client = APIClient(SERVER_NAME="localhost")
 
         call_command("seed_product")  # cek idempotensinya, lihat catatan di bawah
@@ -64,7 +73,7 @@ class Command(BaseCommand):
             self.stderr.write(f"Login gagal: {login.data}")
             return
         client.credentials(HTTP_AUTHORIZATION=f"Bearer {login.data['access']}")
-        
+
         res = client.post(
             reverse("checkout"), data={"cart_ids": [cart.id]}, format="json"
         )
@@ -86,4 +95,6 @@ class Command(BaseCommand):
         self.stdout.write(f"transaction: {res.status_code} {res.data}")
 
         order = Order.objects.first()
-        self.stdout.write(f"order pk={order.pk}, order_id={getattr(order, 'order_id', None)}")
+        self.stdout.write(
+            f"order pk={order.pk}, order_id={getattr(order, 'order_id', None)}"
+        )

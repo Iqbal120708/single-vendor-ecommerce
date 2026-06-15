@@ -44,7 +44,7 @@ class JSONFormatter(logging.Formatter):
                 log_record["checkout_id"] = record.checkout_id
             if hasattr(record, "order_id"):
                 log_record["order_id"] = record.order_id
-                
+
             log_record.update(
                 {
                     "item_value": getattr(record, "item_value", None),
@@ -64,7 +64,7 @@ class JSONFormatter(logging.Formatter):
 
             if hasattr(record, "transaction_status"):
                 log_record["transaction_status"] = record.transaction_status
-                
+
             if hasattr(record, "fraud_status"):
                 log_record["fraud_status"] = record.fraud_status
 
@@ -73,5 +73,5 @@ class JSONFormatter(logging.Formatter):
 
             if hasattr(record, "checkout_id"):
                 log_record["checkout_id"] = record.checkout_id
-                
+
         return json.dumps(log_record)

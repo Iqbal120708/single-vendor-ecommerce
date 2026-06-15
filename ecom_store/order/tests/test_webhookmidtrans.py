@@ -1,5 +1,8 @@
 import hashlib
 import uuid
+
+# from django.utils import timezone
+from datetime import date
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -9,19 +12,16 @@ from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.test import TransactionTestCase, override_settings
 from django.urls import reverse
-#from django.utils import timezone
-from datetime import date
 from freezegun import freeze_time
-from rest_framework.test import APIClient
-
 from order.models import Order
 from product.models import Product
+from rest_framework.test import APIClient
 from store.models import Store
-
 
 User = get_user_model()
 
 today = date.today().isoformat()
+
 
 @override_settings(USE_TZ=True)
 @freeze_time(f"{today}T11:45:00+07:00")
@@ -66,7 +66,7 @@ class TransactionTest(TransactionTestCase):
         token = login.data["access"]
 
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
-    
+
     @patch("accounts.signals.logger")
     @patch("order.views_order_process.logger")
     @patch("order.views_order_process.logger_error")
@@ -108,7 +108,7 @@ class TransactionTest(TransactionTestCase):
         res_checkout = self.client.post(
             reverse("checkout"), data={"cart_ids": [res_add.data["id"]]}, format="json"
         )
-        
+
         self.assertEqual(res_checkout.status_code, 200)
 
         # transaction
@@ -140,7 +140,7 @@ class TransactionTest(TransactionTestCase):
         res = self.client.post(
             reverse("midtrans_webhook"), data=self.data_webhook, format="json"
         )
-        
+
         self.assertEqual(res.status_code, 201)
         self.assertEqual(res.data["detail"], "Order berhasil diproses")
 

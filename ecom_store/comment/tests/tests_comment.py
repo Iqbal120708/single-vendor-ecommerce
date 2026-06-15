@@ -1,16 +1,16 @@
 from unittest.mock import patch
 
+from cart.models import Cart
+from comment.models import Comment
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.urls import reverse
 from freezegun import freeze_time
-# from rest_framework.test import APIClient
-from rest_framework.test import APITestCase
-
-from cart.models import Cart
-from comment.models import Comment
 from order.models import OrderItem
 from product.models import Product
+
+# from rest_framework.test import APIClient
+from rest_framework.test import APITestCase
 from store.models import Store
 
 # from django.test import TransactionTestCase
@@ -153,7 +153,7 @@ class CommentTest(APITestCase):
             reverse("comment", args=[order_item.product.id]),
             data={"rating": 3, "content": "test comment"},
         )
-    
+
         self.assertEqual(res.status_code, 201)
 
         queryset = Comment.objects.count()
@@ -214,7 +214,7 @@ class CommentTest(APITestCase):
             reverse("comment", args=[2]),
             data={"rating": 3, "content": "test update comment"},
         )
-    
+
         self.assertEqual(res.status_code, 200)
 
         # previous data

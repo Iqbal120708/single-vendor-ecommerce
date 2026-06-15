@@ -15,16 +15,16 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
-from dj_rest_auth.urls import urlpatterns as dj_rest_auth_urls
-from dj_rest_auth.views import PasswordResetConfirmView
-from django.contrib import admin
-from django.urls import include, path
 # from drf_spectacular.views import (
 #     SpectacularAPIView,
 #     SpectacularSwaggerView,
 #     SpectacularRedocView,
 # )
 from accounts.views import CustomTokenRefreshView, CustomVerifyEmailAPIView
+from dj_rest_auth.urls import urlpatterns as dj_rest_auth_urls
+from dj_rest_auth.views import PasswordResetConfirmView
+from django.contrib import admin
+from django.urls import include, path
 
 for i, urlpattern in enumerate(dj_rest_auth_urls):
     if getattr(urlpattern, "name", None) == "token_refresh":
@@ -52,7 +52,6 @@ urlpatterns = [
     path("api/order/", include("order.urls")),
     path("api/comment/", include("comment.urls")),
 ]
-
 
 
 # urlpatterns += [

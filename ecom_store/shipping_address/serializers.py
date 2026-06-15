@@ -3,10 +3,12 @@ import re
 from rest_framework import serializers
 
 from .models import City, District, Province, ShippingAddress, SubDistrict
-from .simple_address_serializers import (SimpleCitySerializer,
-                                         SimpleDistrictSerializer,
-                                         SimpleProvinceSerializer,
-                                         SimpleSubDistrictSerializer)
+from .simple_address_serializers import (
+    SimpleCitySerializer,
+    SimpleDistrictSerializer,
+    SimpleProvinceSerializer,
+    SimpleSubDistrictSerializer,
+)
 
 
 class ProvinceSerializer(serializers.ModelSerializer):

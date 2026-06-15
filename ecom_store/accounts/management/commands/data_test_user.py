@@ -4,9 +4,13 @@
 from allauth.account.models import EmailAddress
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
-
-from shipping_address.models import (City, District, Province, ShippingAddress,
-                                     SubDistrict)
+from shipping_address.models import (
+    City,
+    District,
+    Province,
+    ShippingAddress,
+    SubDistrict,
+)
 
 User = get_user_model()
 

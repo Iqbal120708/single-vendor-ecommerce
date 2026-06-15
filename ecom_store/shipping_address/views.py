@@ -5,9 +5,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import City, District, Province, ShippingAddress, SubDistrict
-from .serializers import (CitySerializer, DistrictSerializer,
-                          ProvinceSerializer, ShippingAddressSerializer,
-                          SubDistrictSerializer)
+from .serializers import (
+    CitySerializer,
+    DistrictSerializer,
+    ProvinceSerializer,
+    ShippingAddressSerializer,
+    SubDistrictSerializer,
+)
 from .utils import get_destination_id
 
 
@@ -144,7 +148,7 @@ class ShippingAddressView(APIView):
             )
 
             serializer.is_valid(raise_exception=True)
-            
+
             data = serializer.validated_data
 
             need_refresh_destination = any(
@@ -155,7 +159,7 @@ class ShippingAddressView(APIView):
                     instance.subdistrict != data["subdistrict"],
                 ]
             )
-    
+
             if need_refresh_destination:
                 destination_id = get_destination_id(data)
             else:

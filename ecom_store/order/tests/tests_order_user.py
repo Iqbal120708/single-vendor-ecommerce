@@ -2,15 +2,14 @@ import uuid
 from unittest.mock import patch
 
 from allauth.account.models import EmailAddress
+from cart.models import Cart
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.urls import reverse
 from freezegun import freeze_time
-from rest_framework.test import APITestCase
-
-from cart.models import Cart
 from order.models import OrderItem
 from product.models import Product
+from rest_framework.test import APITestCase
 from store.models import Store
 
 User = get_user_model()

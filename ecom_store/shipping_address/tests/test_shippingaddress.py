@@ -3,14 +3,19 @@ from unittest.mock import patch
 # from rest_framework.test import APITestCase
 from allauth.account.models import EmailAddress
 from django.contrib.auth import get_user_model
+
 # from django.db import connection
 from django.test import TransactionTestCase, override_settings
 from django.urls import reverse
 from freezegun import freeze_time
 from rest_framework.test import APIClient
-
-from shipping_address.models import (City, District, Province, ShippingAddress,
-                                     SubDistrict)
+from shipping_address.models import (
+    City,
+    District,
+    Province,
+    ShippingAddress,
+    SubDistrict,
+)
 
 User = get_user_model()
 
@@ -134,7 +139,7 @@ class TestAddress(TransactionTestCase):
         self.assertEqual(data["created_at"], "2025-12-08T11:45:00+07:00")
         self.assertEqual(data["updated_at"], "2025-12-08T11:45:00+07:00")
         self.assertTrue(data["is_default"])
-        
+
         self.assertEqual(data["latitude"], "-8.5899")
         self.assertEqual(data["longitude"], "116.1107")
 
@@ -168,7 +173,7 @@ class TestAddress(TransactionTestCase):
         self.assertEqual(data["created_at"], "2025-12-08T11:45:00+07:00")
         self.assertEqual(data["updated_at"], "2025-12-08T11:45:00+07:00")
         self.assertTrue(data["is_default"])
-        
+
         self.assertEqual(data["latitude"], "-8.5899")
         self.assertEqual(data["longitude"], "116.1107")
 
@@ -194,7 +199,7 @@ class TestAddress(TransactionTestCase):
         self.assertEqual(data2["created_at"], "2025-12-08T11:45:00+07:00")
         self.assertEqual(data2["updated_at"], "2025-12-08T11:45:00+07:00")
         self.assertFalse(data2["is_default"])
-        
+
         self.assertEqual(data["latitude"], "-8.5899")
         self.assertEqual(data["longitude"], "116.1107")
 
@@ -226,7 +231,7 @@ class TestAddress(TransactionTestCase):
         self.assertEqual(data["created_at"], "2025-12-08T11:45:00+07:00")
         self.assertEqual(data["updated_at"], "2025-12-08T11:45:00+07:00")
         self.assertTrue(data["is_default"])
-        
+
         self.assertEqual(data["latitude"], "-8.5899")
         self.assertEqual(data["longitude"], "116.1107")
 
@@ -263,7 +268,7 @@ class TestAddress(TransactionTestCase):
                 "street_address": "Jl. Post",
                 "is_default": True,
                 "latitude": -8.5899,
-                "longitude": 116.1107
+                "longitude": 116.1107,
             },
         )
 
@@ -311,9 +316,11 @@ class TestAddress(TransactionTestCase):
         # data ada 4, 3 dari setup, 1 dari post
         shipping_address = ShippingAddress.objects.all()
         self.assertEqual(len(shipping_address), 4)
-        
+
         # mengecek destination_id
-        shipping_address = ShippingAddress.objects.filter(street_address="Jl. Post").first()
+        shipping_address = ShippingAddress.objects.filter(
+            street_address="Jl. Post"
+        ).first()
         self.assertEqual(shipping_address.destination_id, 1)
 
     # @patch("accounts.signals.logger")
@@ -377,7 +384,7 @@ class TestAddress(TransactionTestCase):
         cek perubahan destination_id
         """
         self.handle_login()
-        
+
         self.subdistrict = SubDistrict.objects.create(
             ro_id=2, name="PAGESANGAN", zip_code="83127", district=self.district
         )
@@ -392,7 +399,7 @@ class TestAddress(TransactionTestCase):
                 "street_address": "Jl. Put",
                 "is_default": True,
                 "latitude": -8.6019,
-                "longitude": 116.1033
+                "longitude": 116.1033,
             },
         )
 
@@ -403,7 +410,7 @@ class TestAddress(TransactionTestCase):
         self.assertEqual(data["created_at"], "2025-12-08T11:45:00+07:00")
         self.assertEqual(data["updated_at"], "2025-12-16T19:07:00+07:00")
         self.assertTrue(data["is_default"])
-        
+
         # cek perubahan data subdistrict, zip_code, street_address
         self.assertEqual(data["subdistrict"]["name"], "PAGESANGAN")
         self.assertEqual(data["subdistrict"]["zip_code"], "83127")
@@ -412,16 +419,20 @@ class TestAddress(TransactionTestCase):
         self.assertEqual(data["user"]["id"], 1)
         self.assertEqual(data["user"]["username"], "test")
         self.assertEqual(data["user"]["email"], "test@gmail.com")
-        
+
         # mengecek destination_id
-        shipping_address = ShippingAddress.objects.filter(street_address="Jl. Put").first()
+        shipping_address = ShippingAddress.objects.filter(
+            street_address="Jl. Put"
+        ).first()
         # pastikan != 1
-        self.assertEqual(shipping_address.destination_id, 2) 
-        
+        self.assertEqual(shipping_address.destination_id, 2)
+
     @freeze_time("2025-12-16T19:07:00+07:00")
     @patch("accounts.signals.logger")
     @patch("shipping_address.views.get_destination_id")
-    def test_put_not_refresh_destination_when_location_unchanged(self, mock_get_destination_id, mock_logger):
+    def test_put_not_refresh_destination_when_location_unchanged(
+        self, mock_get_destination_id, mock_logger
+    ):
         """
         cek perubahan data street_address
         cek tidak ada perubahan data destination_id
@@ -439,7 +450,7 @@ class TestAddress(TransactionTestCase):
                 "street_address": "Jl. Put",
                 "is_default": True,
                 "latitude": -8.5899,
-                "longitude": 116.1107
+                "longitude": 116.1107,
             },
         )
 
@@ -450,19 +461,21 @@ class TestAddress(TransactionTestCase):
         self.assertEqual(data["created_at"], "2025-12-08T11:45:00+07:00")
         self.assertEqual(data["updated_at"], "2025-12-16T19:07:00+07:00")
         self.assertTrue(data["is_default"])
-        
+
         # cek perubahan data street_address
         self.assertEqual(data["street_address"], "Jl. Put")
 
         self.assertEqual(data["user"]["id"], 1)
         self.assertEqual(data["user"]["username"], "test")
         self.assertEqual(data["user"]["email"], "test@gmail.com")
-        
+
         # mengecek destination_id
-        shipping_address = ShippingAddress.objects.filter(street_address="Jl. Put").first()
+        shipping_address = ShippingAddress.objects.filter(
+            street_address="Jl. Put"
+        ).first()
         # pastikan != 1
-        self.assertEqual(shipping_address.destination_id, 1) 
-        
+        self.assertEqual(shipping_address.destination_id, 1)
+
         # cek fungsi get_destination_id tidak dipanggil
         mock_get_destination_id.assert_not_called()
 
@@ -487,7 +500,7 @@ class TestAddress(TransactionTestCase):
                 "street_address": "Jl. Put",
                 "is_default": True,
                 "latitude": -8.5899,
-                "longitude": 116.1107
+                "longitude": 116.1107,
             },
         )
 

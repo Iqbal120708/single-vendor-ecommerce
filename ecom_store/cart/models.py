@@ -1,7 +1,6 @@
+from config.models import BaseModel
 from django.contrib.auth import get_user_model
 from django.db import models
-
-from config.models import BaseModel
 from product.models import Product
 
 User = get_user_model()

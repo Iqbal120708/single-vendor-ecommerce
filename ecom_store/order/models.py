@@ -1,10 +1,9 @@
 import uuid
 
+from config.models import BaseModel
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
-from config.models import BaseModel
-
 
 # Create your models here.
 # class Courier(BaseModel):
@@ -14,6 +13,7 @@ from config.models import BaseModel
 
 #     def __str__(self):
 #         return f"{self.name} - {self.code}"
+
 
 class ShippingInsurance(BaseModel):
     shipping = models.CharField(max_length=50, unique=True)
@@ -26,7 +26,7 @@ class ShippingInsurance(BaseModel):
 
 class Order(BaseModel):
     class Status(models.TextChoices):
-        #DRAFT = "draft", "Draft"
+        # DRAFT = "draft", "Draft"
         PENDING = "pending", "Pending"
         PROCESSING = "processing", "Processing"
         SHIPPED = "shipped", "Shipped"
@@ -74,10 +74,7 @@ class Order(BaseModel):
     canceled_at = models.DateTimeField(null=True, blank=True)
 
     payment_method = models.CharField(
-        max_length=20,
-        choices=PaymentMethod.choices,
-        null=True,
-        blank=True
+        max_length=20, choices=PaymentMethod.choices, null=True, blank=True
     )
 
     payment_status = models.CharField(
@@ -99,8 +96,7 @@ class Order(BaseModel):
         default=0,
         editable=False,
         help_text=(
-            "Snapshot pendapatan bersih hasil perhitungan ongkir "
-            "saat order dibuat."
+            "Snapshot pendapatan bersih hasil perhitungan ongkir " "saat order dibuat."
         ),
     )
 
@@ -111,9 +107,9 @@ class Order(BaseModel):
             "Snapshot pendapatan bersih akhir yang diterima toko saat order dibuat."
         ),
     )
-    
+
     reduced_stock = models.BooleanField(default=False, editable=False)
-    
+
     def clean(self):
         super().clean()
 
@@ -134,8 +130,11 @@ class Order(BaseModel):
     def __str__(self):
         return f"Order {self.order_id}"
 
+
 class OrderShipping(BaseModel):
-    order = models.OneToOneField(Order, related_name="shipping", on_delete=models.CASCADE)
+    order = models.OneToOneField(
+        Order, related_name="shipping", on_delete=models.CASCADE
+    )
 
     # courier
     shipping_name = models.CharField(
@@ -201,13 +200,14 @@ class OrderShipping(BaseModel):
         null=True,
         blank=True,
     )
-    
+
     tracking_number = models.CharField(
         max_length=100,
         null=True,
         blank=True,
-        help_text="Nomor resi pengiriman dari kurir, diisi manual oleh admin setelah packing."
+        help_text="Nomor resi pengiriman dari kurir, diisi manual oleh admin setelah packing.",
     )
+
 
 class OrderItem(BaseModel):
     id = models.BigAutoField(primary_key=True)
@@ -240,6 +240,6 @@ class CheckoutSession(BaseModel):
         null=True,
         blank=True,
     )
-    
+
     def __str__(self):
         return f"{self.user} - {self.id}"

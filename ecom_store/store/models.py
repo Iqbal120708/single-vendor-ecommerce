@@ -1,8 +1,7 @@
+from config.models import BaseModel
 from django.core.exceptions import ValidationError
 from django.db import models
 from phonenumber_field.modelfields import PhoneNumberField
-
-from config.models import BaseModel
 from shipping_address.models import ShippingAddress
 
 
@@ -16,17 +15,16 @@ class Store(BaseModel):
     is_active = models.BooleanField(default=True)
     enable_insurance = models.BooleanField(
         default=True,
-        help_text="Aktifkan atau nonaktifkan asuransi pengiriman otomatis."
+        help_text="Aktifkan atau nonaktifkan asuransi pengiriman otomatis.",
     )
-    
+
     insurance_threshold = models.PositiveIntegerField(
-        default=300_000,
-        help_text="Minimal total produk agar asuransi diterapkan."
+        default=300_000, help_text="Minimal total produk agar asuransi diterapkan."
     )
-    
+
     insurance_paid_by_customer = models.BooleanField(
         default=True,
-        help_text="Tentukan apakah biaya asuransi dibebankan kepada pembeli."
+        help_text="Tentukan apakah biaya asuransi dibebankan kepada pembeli.",
     )
 
     @property
@@ -51,9 +49,10 @@ class Store(BaseModel):
         raise ValidationError(
             "Data toko tidak dapat dihapus. Silakan nonaktifkan toko dengan mengubah status aktif."
         )
-        
+
     def __str__(self):
         return self.name
+
 
 class StoreShippingOption(models.Model):
     store = models.ForeignKey(Store, on_delete=models.CASCADE)

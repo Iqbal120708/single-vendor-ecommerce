@@ -13,10 +13,10 @@ class UserDeleteWarning(Warning):
 class CustomUser(AbstractUser):
     email = models.EmailField(unique=True)
     phone_number = PhoneNumberField(unique=True)
-    
-    USERNAME_FIELD = 'email'
+
+    USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
-    
+
     @property
     def clean_phone_number(self):
         if self.phone_number:
@@ -26,16 +26,17 @@ class CustomUser(AbstractUser):
     def soft_delete(self):
         self.is_active = False
         self.save(update_fields=["is_active"])
-    
+
     def hard_delete(self):
         return super().delete()
-    
+
     def delete(self, *args, **kwargs):
         raise RuntimeError("Gunakan soft_delete() atau hard_delete()")
 
     def __str__(self):
         return self.email
-        
+
+
 # from django.db.models import Q
 
 # class UserShippingAddress(models.Model):

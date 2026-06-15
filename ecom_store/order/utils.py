@@ -1,28 +1,28 @@
 import logging
+import re
 
 import requests
+from cart.models import Cart
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils.timezone import localtime, now
+from product.models import Product
 from rest_framework import serializers
+from rest_framework.exceptions import APIException, NotFound
 
 # from shipping_address.utils import format_address
 from store.models import Store, StoreShippingOption
-from cart.models import Cart
-from product.models import Product
-from .models import Order, OrderItem, CheckoutSession
-import re
 
-from rest_framework.exceptions import APIException, NotFound
+from .models import CheckoutSession, Order, OrderItem
 
 
 class RajaOngkirException(APIException):
     status_code = 502
     default_detail = "Shipping service unavailable."
 
+
 logger = logging.getLogger("order")
 logger_error = logging.getLogger("order_error")
-
 
 
 def extract_min_etd(etd):
@@ -38,54 +38,48 @@ def extract_min_etd(etd):
 
     match = re.search(r"\d+", etd)
     return int(match.group())
-    
+
+
 def has_valid_etd(shipping):
     etd = shipping.get("etd", "")
     return bool(re.search(r"\d+", etd))
 
-def get_active_shipping(shippings):
-    shipping_names = [
-        shipping.get("shipping_name", "")
-        for shipping in shippings
-    ]
-    
-    active_names = StoreShippingOption.objects.filter(
-        shipping_name__in=shipping_names,
-        is_active=True
-    ).values_list("shipping_name", flat=True)
-    
-    couriers = [courier.upper() for courier in active_names]
-    
-    return [
-        shipping for shipping in shippings
-        if shipping.get("shipping_name", "") in couriers
-    ]
-    
-def get_best_shipping(shippings, is_cod):
-    if not shippings: return None
-        
-    shippings = get_active_shipping(shippings)
 
-    valid_shippings = [ 
+def get_active_shipping(shippings):
+    shipping_names = [shipping.get("shipping_name", "") for shipping in shippings]
+
+    active_names = StoreShippingOption.objects.filter(
+        shipping_name__in=shipping_names, is_active=True
+    ).values_list("shipping_name", flat=True)
+
+    couriers = [courier.upper() for courier in active_names]
+
+    return [
         shipping
         for shipping in shippings
-        if has_valid_etd(shipping)
+        if shipping.get("shipping_name", "") in couriers
     ]
-    
+
+
+def get_best_shipping(shippings, is_cod):
+    if not shippings:
+        return None
+
+    shippings = get_active_shipping(shippings)
+
+    valid_shippings = [shipping for shipping in shippings if has_valid_etd(shipping)]
+
     if valid_shippings:
         shippings = valid_shippings
 
     if is_cod:
-        cod_shippings = [
-            shipping
-            for shipping in shippings
-            if shipping["is_cod"]
-        ]
+        cod_shippings = [shipping for shipping in shippings if shipping["is_cod"]]
 
         shippings = cod_shippings
-        
-    if not shippings: return None
-    
+
+    if not shippings:
+        return None
+
     return min(
         shippings,
         key=lambda shipping: (
@@ -93,17 +87,12 @@ def get_best_shipping(shippings, is_cod):
             extract_min_etd(shipping["etd"]),
         ),
     )
-    
+
 
 def fetch_shipping_rates_from_rajaongkir(params, is_cod):
-    headers = {
-        "x-api-key": settings.API_KEY_RAJA_ONGKIR_SHIPPING_DELIVERY
-    }
+    headers = {"x-api-key": settings.API_KEY_RAJA_ONGKIR_SHIPPING_DELIVERY}
 
-    url = (
-        "https://api-sandbox.collaborator.komerce.id/"
-        "tariff/api/v1/calculate"
-    )
+    url = "https://api-sandbox.collaborator.komerce.id/" "tariff/api/v1/calculate"
 
     try:
         res = requests.get(
@@ -116,64 +105,51 @@ def fetch_shipping_rates_from_rajaongkir(params, is_cod):
         res.raise_for_status()
 
     except requests.Timeout:
-        raise RajaOngkirException(
-            "Shipping provider timeout."
-        )
+        raise RajaOngkirException("Shipping provider timeout.")
 
     except requests.ConnectionError:
-        raise RajaOngkirException(
-            "Cannot connect to shipping provider."
-        )
+        raise RajaOngkirException("Cannot connect to shipping provider.")
 
     except requests.HTTPError:
-        raise RajaOngkirException(
-            f"Shipping provider returned {res.status_code}."
-        )
+        raise RajaOngkirException(f"Shipping provider returned {res.status_code}.")
 
     try:
         payload = res.json()
     except ValueError:
-        raise RajaOngkirException(
-            "Invalid response from shipping provider."
-        )
+        raise RajaOngkirException("Invalid response from shipping provider.")
 
     meta = payload.get("meta", {})
     data = payload.get("data", {})
 
     if meta.get("status") != "success":
-        raise RajaOngkirException(
-            meta.get("message", "Shipping calculation failed.")
-        )
-    
+        raise RajaOngkirException(meta.get("message", "Shipping calculation failed."))
+
     return {
-        "reguler": get_best_shipping(
-            data.get("calculate_reguler", []), is_cod
-        ),
-        "cargo": get_best_shipping(
-            data.get("calculate_cargo", []), is_cod
-        ),
-        "instant": get_best_shipping(
-            data.get("calculate_instant", []), is_cod
-        ),
+        "reguler": get_best_shipping(data.get("calculate_reguler", []), is_cod),
+        "cargo": get_best_shipping(data.get("calculate_cargo", []), is_cod),
+        "instant": get_best_shipping(data.get("calculate_instant", []), is_cod),
     }
-    
 
 
 def get_destination(user, shipping_address_id=None):
     if shipping_address_id:
         destination = user.shippingaddress_set.filter(id=shipping_address_id).first()
+        if destination is None:
+            logger.warning(
+                f"Shipping address tidak ditemukan. User ID: {user.id}, Address ID: {shipping_address_id}"
+            )
+            raise serializers.ValidationError(
+                {"detail": "Alamat pengiriman tidak ditemukan."}
+            )
     else:
         destination = user.shippingaddress_set.filter(is_default=True).first()
-
-    if not destination:
-        logger.warning(
-            f"Destination tidak ditemukan. User ID: {user.id}, Address ID Provided: {shipping_address_id}"
-        )
-        raise serializers.ValidationError(
-            {
-                "error": "Alamat pengiriman belum dipilih. Silakan pilih salah satu alamat Anda atau atur salah satu sebagai 'Alamat Utama' (Default)."
-            }
-        )
+        if destination is None:
+            logger.warning(f"Default address tidak ditemukan. User ID: {user.id}")
+            raise serializers.ValidationError(
+                {
+                    "detail": "Belum ada alamat pengiriman. Silakan tambahkan alamat terlebih dahulu."
+                }
+            )
 
     return destination
 
@@ -249,11 +225,11 @@ def get_destination(user, shipping_address_id=None):
 # belum selesai
 def fetch_order_rajaongkir(order):
     order_details = create_order_details(order.items.all())
-    
+
     additional_cost = order.additional_cost
     if order.store.insurance_paid_by_customer:
         additional_cost += order.insurance_value
-        
+
     order_data = {
         "order_date": str(localtime(order.created_at).date()),
         "brand_name": order.store.brand_name,
@@ -280,14 +256,14 @@ def fetch_order_rajaongkir(order):
         # "origin_pin_point": "-7.274631, 109.207174",
         # "destination_pin_point": "-7.274631, 109.207174",
     }
-    
+
     headers = {"x-api-key": settings.API_KEY_RAJA_ONGKIR_SHIPPING_DELIVERY}
     res = requests.post(
         "https://api-sandbox.collaborator.komerce.id/order/api/v1/orders/store",
         json=order_data,
         headers=headers,
     )
-    
+
     return res
 
 
@@ -306,7 +282,9 @@ def fetch_order_rajaongkir(order):
 def reduce_product_stock(order_items):
     product_ids = order_items.values_list("product_id", flat=True)
 
-    products = Product.objects.select_for_update().filter(id__in=product_ids).order_by("id")
+    products = (
+        Product.objects.select_for_update().filter(id__in=product_ids).order_by("id")
+    )
 
     product_map = {p.id: p for p in products}
 
@@ -319,13 +297,17 @@ def reduce_product_stock(order_items):
         product.stock -= item.qty
         product.reserved_stock -= item.qty
         product.save(update_fields=["stock", "reserved_stock"])
-        
-        
+
+
 def get_valid_checkout(user, checkout_id):
     try:
-        checkout = CheckoutSession.objects.select_related(
-            "destination", "store", "user", "order"
-        ).prefetch_related("order__items").get(id=checkout_id, user=user)
+        checkout = (
+            CheckoutSession.objects.select_related(
+                "destination", "store", "user", "order"
+            )
+            .prefetch_related("order__items")
+            .get(id=checkout_id, user=user)
+        )
     except CheckoutSession.DoesNotExist:
         logger_error.error(
             "CheckoutSession not found",
@@ -339,37 +321,33 @@ def get_valid_checkout(user, checkout_id):
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    # VALIDASI DATA CheckoutSession, return error jika expired 
+    # VALIDASI DATA CheckoutSession, return error jika expired
     if now() >= checkout.expires_at:
         return Response(
             {
-                "error": "Sesi telah berakhir atau tidak ditemukan. Silakan ulangi proses (Maks. 10 menit)."
+                "detail": "Sesi telah berakhir atau tidak ditemukan. Silakan ulangi proses (Maks. 10 menit)."
             },
             status=status.HTTP_408_REQUEST_TIMEOUT,
         )
-        
+
     return checkout
+
 
 def get_valid_carts(user, cart_ids):
     carts = Cart.objects.filter(user=user, pk__in=cart_ids).select_related("product")
-    
+
     # VALIDASI DATA Cart, jika ada yang missing id return error
-    found_ids = set(
-        carts.values_list("id", flat=True)
-    )
+    found_ids = set(carts.values_list("id", flat=True))
     requested_ids = set(cart_ids)
     missing_ids = requested_ids - found_ids
     if missing_ids:
         raise serializers.ValidationError(
-            {
-                "cart_ids": (
-                    f"Cart IDs not found: {list(missing_ids)}"
-                )
-            }
+            {"cart_ids": (f"Cart IDs not found: {list(missing_ids)}")}
         )
-        
+
     return carts
-    
+
+
 def create_order_details(order_items):
     order_details = []
 

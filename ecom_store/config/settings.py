@@ -63,7 +63,7 @@ INSTALLED_APPS = [
     "order",
     "store",
     "comment",
-    #"drf_spectacular",
+    # "drf_spectacular",
     # "corsheaders",
 ]
 
@@ -293,4 +293,4 @@ API_KEY_RAJA_ONGKIR_SHIPPING_DELIVERY = os.environ.get(
 MIDTRANS_SERVER_KEY = os.environ.get("MIDTRANS_SERVER_KEY")
 MIDTRANS_CLIENT_KEY = os.environ.get("MIDTRANS_CLIENT_KEY")
 MIDTRANS_IS_PRODUCTION = os.environ.get("MIDTRANS_IS_PRODUCTION") == "True"
-#MIDTRANS_FINISH_URL = "http://127.0.0.1:5000/payment/finish"
+# MIDTRANS_FINISH_URL = "http://127.0.0.1:5000/payment/finish"

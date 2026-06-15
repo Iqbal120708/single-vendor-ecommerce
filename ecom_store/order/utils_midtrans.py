@@ -4,6 +4,7 @@ import logging
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+
 from .models import Order
 from .utils import fetch_order_rajaongkir, reduce_product_stock
 
@@ -58,13 +59,13 @@ class WebhookMidtrans:
     def change_payment_status_order(self):
         transaction_status = self.payload.get("transaction_status")
         fraud_status = self.payload.get("fraud_status")
-    
+
         if transaction_status in ["settlement", "capture"]:
             if fraud_status == "accept":
                 self.order.payment_status = "paid"
         elif transaction_status in ["deny", "cancel", "expire"]:
             self.order.payment_status = "failed"
-    
+
         if self.order.payment_status != "paid":
             logger_error.info(
                 "Payment not completed",
@@ -75,11 +76,10 @@ class WebhookMidtrans:
                     "fraud_status": fraud_status,
                 },
             )
-    
+
         self.order.save(update_fields=["payment_status"])
         return self.order.payment_status == "paid"
-            
-            
+
     def reduce_stock(self):
         try:
             if not self.order.reduced_stock:
@@ -138,5 +138,3 @@ class WebhookMidtrans:
     #     self.order.order_id_ro = data["order_id"]
     #     self.order.order_no_ro = data["order_no"]
     #     self.order.save()
-
-    

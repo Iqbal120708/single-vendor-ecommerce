@@ -2,7 +2,6 @@ import random
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
-
 from product.models import Category, Product
 
 # from decimal import Decimal
@@ -24,13 +23,13 @@ class Command(BaseCommand):
             Product.objects.create(
                 variant_name=f"Variant Sample Product {i}",
                 name=f"Sample Product {i}",
-                price=10_000*i,
+                price=10_000 * i,
                 category=category,
                 stock=50,
-                weight=500*i,
-                height=2+i,
-                width=2+i,
-                length=5*i,
+                weight=500 * i,
+                height=2 + i,
+                width=2 + i,
+                length=5 * i,
             )
 
         self.stdout.write(self.style.SUCCESS("10 sample products created"))

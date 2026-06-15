@@ -1,9 +1,8 @@
+from config.models import BaseModel
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
-
-from config.models import BaseModel
 
 
 class Province(BaseModel):
@@ -13,6 +12,7 @@ class Province(BaseModel):
     def __str__(self):
         return self.name
 
+
 class City(BaseModel):
     ro_id = models.IntegerField(unique=True)
     name = models.CharField(max_length=100)
@@ -21,6 +21,7 @@ class City(BaseModel):
     def __str__(self):
         return self.name
 
+
 class District(BaseModel):
     ro_id = models.IntegerField(unique=True)
     name = models.CharField(max_length=100)
@@ -28,6 +29,7 @@ class District(BaseModel):
 
     def __str__(self):
         return self.name
+
 
 class SubDistrict(BaseModel):
     ro_id = models.IntegerField(unique=True)
@@ -38,6 +40,7 @@ class SubDistrict(BaseModel):
     def __str__(self):
         return f"{self.name} - {self.zip_code}"
 
+
 class ShippingAddress(BaseModel):
     province = models.ForeignKey(Province, on_delete=models.PROTECT)
     city = models.ForeignKey(City, on_delete=models.PROTECT)
@@ -47,7 +50,7 @@ class ShippingAddress(BaseModel):
     is_default = models.BooleanField(default=False)
     destination_id = models.IntegerField()
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    
+
     latitude = models.DecimalField(
         max_digits=10,
         decimal_places=7,
@@ -90,7 +93,7 @@ class ShippingAddress(BaseModel):
 
         # Filter jika ada data yang None/Kosong agar tidak muncul koma berlebih
         return ", ".join([str(p) for p in address_parts if p])
-        
+
     @property
     def get_coordinates(self):
         return f"{self.latitude},{self.longitude}"
@@ -118,7 +121,8 @@ class ShippingAddress(BaseModel):
 
     def __str__(self):
         return self.formatted_address
-        
+
+
 # shi_add = ShippingAddress.objects.filter(
 #     province__name__iexact="",
 #     city__name__iexact="",

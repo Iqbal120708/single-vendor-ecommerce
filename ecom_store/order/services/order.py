@@ -1,12 +1,12 @@
 from decimal import Decimal
 from math import ceil
-from order.models import ShippingInsurance, Order, OrderShipping, OrderItem
+
 from django.db import transaction
+from order.models import Order, OrderItem, OrderShipping, ShippingInsurance
+
 
 def calculate_insurance(order, order_shipping):
-    total_item_value = int(
-        sum(item.subtotal for item in order.items.all())
-    )
+    total_item_value = int(sum(item.subtotal for item in order.items.all()))
 
     use_insurance = (
         order.store.enable_insurance
@@ -28,15 +28,11 @@ def calculate_insurance(order, order_shipping):
         rate = Decimal("0.002")
         admin_fee = 2000
 
-    return ceil(
-        (total_item_value * float(rate))
-        + admin_fee
-    )
+    return ceil((total_item_value * float(rate)) + admin_fee)
+
 
 def calculate_grand_total(order, order_shipping):
-    subtotal = int(
-        sum(item.subtotal for item in order.items.all())
-    )
+    subtotal = int(sum(item.subtotal for item in order.items.all()))
 
     insurance_cost = 0
 
@@ -50,20 +46,20 @@ def calculate_grand_total(order, order_shipping):
         + order_shipping.additional_cost
         + insurance_cost
     )
-    
+
+
 class OrderService:
     def __init__(self, checkout, carts):
         self.checkout = checkout
         self.carts = carts
         self.order = None
-        
+
     def create_order(self):
         self.order = Order.objects.create(
             user=self.checkout.user,
             store=self.checkout.store,
         )
-        
-        
+
     def create_order_item(self):
         for cart in self.carts:
             order_item = OrderItem.objects.create(
@@ -72,12 +68,13 @@ class OrderService:
                 product_price=cart.product.price,
                 qty=cart.qty,
             )
-        
+
     def execute(self):
         # with transaction.atomic():
         self.create_order()
         self.create_order_item()
         return self.order
+
 
 class OrderShippingService:
     def __init__(self, order, serializer_data, checkout):
@@ -85,7 +82,7 @@ class OrderShippingService:
         self.serializer_data = serializer_data
         self.checkout = checkout
         self.order_shipping = None
-    
+
     def create_order_shipping(self):
         self.order_shipping = OrderShipping.objects.create(
             order=self.order,
@@ -101,9 +98,9 @@ class OrderShippingService:
             origin_address=self.checkout.store.shipping_address.formatted_address,
             destination_ro=self.checkout.destination.destination_id,
             destination_address=self.checkout.destination.formatted_address,
-            insurance_value=calculate_insurance(self.order, self.order_shipping)
+            insurance_value=calculate_insurance(self.order, self.order_shipping),
         )
-        
+
     def finalize_order(self):
         payment_method = (
             Order.PaymentMethod.COD
@@ -112,8 +109,8 @@ class OrderShippingService:
         )
         self.order.payment_method = payment_method
         self.order.grand_total = calculate_grand_total(self.order, self.order_shipping)
-        #self.order.status = Order.Status.PENDING
-        
+        # self.order.status = Order.Status.PENDING
+
         net_income = self.serializer_data["net_income"]
         self.order.net_income = net_income
         if not self.order.store.insurance_paid_by_customer:
@@ -122,9 +119,17 @@ class OrderShippingService:
             )
         else:
             self.order.actual_net_income = net_income
-            
-        self.order.save(update_fields=["payment_method", "grand_total", "status", "net_income", "actual_net_income"])
-        
+
+        self.order.save(
+            update_fields=[
+                "payment_method",
+                "grand_total",
+                "status",
+                "net_income",
+                "actual_net_income",
+            ]
+        )
+
     def execute(self):
         with transaction.atomic():
             self.create_order_shipping()
