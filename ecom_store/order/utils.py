@@ -20,6 +20,9 @@ class RajaOngkirException(APIException):
     status_code = 502
     default_detail = "Shipping service unavailable."
 
+class CheckoutExpired(APIException):
+    status_code = 408
+    default_detail = "Sesi telah berakhir atau tidak ditemukan. Silakan ulangi proses (Maks. 10 menit)."
 
 logger = logging.getLogger("order")
 logger_error = logging.getLogger("order_error")
@@ -37,6 +40,9 @@ def extract_min_etd(etd):
         return 0
 
     match = re.search(r"\d+", etd)
+    if match is None:
+        return 999
+        
     return int(match.group())
 
 
@@ -52,7 +58,7 @@ def get_active_shipping(shippings):
         shipping_name__in=shipping_names, is_active=True
     ).values_list("shipping_name", flat=True)
 
-    couriers = [courier.upper() for courier in active_names]
+    couriers = [courier for courier in active_names]
 
     return [
         shipping
@@ -92,7 +98,7 @@ def get_best_shipping(shippings, is_cod):
 def fetch_shipping_rates_from_rajaongkir(params, is_cod):
     headers = {"x-api-key": settings.API_KEY_RAJA_ONGKIR_SHIPPING_DELIVERY}
 
-    url = "https://api-sandbox.collaborator.komerce.id/" "tariff/api/v1/calculate"
+    url = "https://api-sandbox.collaborator.komerce.id/tariff/api/v1/calculate"
 
     try:
         res = requests.get(
@@ -316,19 +322,11 @@ def get_valid_checkout(user, checkout_id):
                 "checkout_id": checkout_id,
             },
         )
-        return Response(
-            {"detail": "CheckoutSession tidak ditemukan"},
-            status=status.HTTP_404_NOT_FOUND,
-        )
+        raise NotFound("CheckoutSession tidak ditemukan")
 
     # VALIDASI DATA CheckoutSession, return error jika expired
     if now() >= checkout.expires_at:
-        return Response(
-            {
-                "detail": "Sesi telah berakhir atau tidak ditemukan. Silakan ulangi proses (Maks. 10 menit)."
-            },
-            status=status.HTTP_408_REQUEST_TIMEOUT,
-        )
+        raise CheckoutExpired()
 
     return checkout
 
