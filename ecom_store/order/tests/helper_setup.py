@@ -101,7 +101,7 @@ def set_store(province, city, district):
 
 def set_store_shipping_option(store):
     data = []
-    for name in ["jne", "jnt", "sicepat"]:
+    for name in ["JNE", "JNT", "SICEPAT"]:
         data.append(StoreShippingOption(shipping_name=name, store=store))
 
     return StoreShippingOption.objects.bulk_create(data)
