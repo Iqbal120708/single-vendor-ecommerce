@@ -25,6 +25,7 @@ from .utils import (
     get_destination,
     get_valid_carts,
     get_valid_checkout,
+    RajaOngkirException
 )
 from .utils_midtrans import (
     InvalidMidtransPayload,
@@ -109,7 +110,7 @@ class CheckoutView(APIView):
 class ShippingRates(APIView):
     def post(self, request):
         checkout_id = request.data.get("checkout_id")
-        is_cod = request.data.get("is_cod")
+        is_cod = request.data.get("is_cod", False)
 
         checkout = get_valid_checkout(request.user, checkout_id)
 
@@ -123,16 +124,16 @@ class ShippingRates(APIView):
             "receiver_destination_id": checkout.destination.destination_id,
             "weight": total_weight / 1000,  # grams to kilograms
             "item_value": int(total_price),
-            "cod": "yes" if is_cod else "no",
+            "cod": "yes",
             "origin_pin_point": checkout.store.shipping_address.get_coordinates,
             "destination_pin_point": checkout.destination.get_coordinates,
         }
 
         try:
             shipping_options = fetch_shipping_rates_from_rajaongkir(params, is_cod)
-        except serializers.ValidationError as e:
+        except RajaOngkirException as e:
             logger_error.error(
-                f"Gagal mengambil ongkir RajaOngkir untuk User {request.user.id}. Error: {e.detail["error"]}",
+                f"Gagal mengambil ongkir RajaOngkir untuk User {request.user.id}. Error: {e.detail}",
                 extra={
                     "event_type": "shippingrates",
                     "checkout_id": checkout.id,
