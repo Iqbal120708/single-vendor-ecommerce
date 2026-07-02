@@ -56,5 +56,12 @@ class Store(BaseModel):
 
 class StoreShippingOption(models.Model):
     store = models.ForeignKey(Store, on_delete=models.CASCADE)
-    shipping_name = models.CharField(max_length=20)  # jne, jnt, sicepat
+    shipping_name = models.CharField(max_length=20)  # JNE, JNT, SICEPAT
     is_active = models.BooleanField(default=True)
+
+    def save(self, *args, **kwargs):
+        self.shipping_name = self.shipping_name.upper()
+        super().save(*args, **kwargs)
+        
+    def __str__(self):
+        return self.shipping_name
