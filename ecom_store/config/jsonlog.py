@@ -1,7 +1,7 @@
 import json
 import logging
 import traceback
-
+from django.core.serializers.json import DjangoJSONEncoder
 
 class JSONFormatter(logging.Formatter):
     def format(self, record):
@@ -41,7 +41,7 @@ class JSONFormatter(logging.Formatter):
 
         elif event_type == "shippingrates":
             if hasattr(record, "checkout_id"):
-                log_record["checkout_id"] = record.checkout_id
+                log_record["checkout_id"] = str(record.checkout_id)
             if hasattr(record, "order_id"):
                 log_record["order_id"] = record.order_id
 
@@ -72,6 +72,6 @@ class JSONFormatter(logging.Formatter):
                 log_record["response"] = record.response
 
             if hasattr(record, "checkout_id"):
-                log_record["checkout_id"] = record.checkout_id
+                log_record["checkout_id"] = str(record.checkout_id)
 
-        return json.dumps(log_record)
+        return json.dumps(log_record, cls=DjangoJSONEncoder)

@@ -23,6 +23,11 @@ class RajaOngkirException(APIException):
 class CheckoutExpired(APIException):
     status_code = 408
     default_detail = "Sesi telah berakhir atau tidak ditemukan. Silakan ulangi proses (Maks. 10 menit)."
+    
+class GrossAmountMismatch(APIException):
+    status_code = 500
+    default_detail = "Terjadi kesalahan kalkulasi order."
+    default_code = "gross_amount_mismatch"
 
 logger = logging.getLogger("order")
 logger_error = logging.getLogger("order_error")
@@ -367,3 +372,79 @@ def create_order_details(order_items):
         )
 
     return order_details
+
+def build_item_details(order, order_items, checkout):
+    """Bangun list item_details untuk payload Midtrans dari order + shipping."""
+    item_details = []
+
+    for item in order_items:
+        item_details.append({
+            "id": str(item.product.id),
+            "price": int(item.product_price),
+            "quantity": item.qty,
+            "name": item.product.name,
+        })
+
+    item_details.append({
+        "id": "SHIPPING",
+        "price": int(order.shipping.shipping_cost),
+        "quantity": 1,
+        "name": f"Ongkir {order.shipping.shipping_name} {order.shipping.service_name}",
+    })
+
+    if checkout.store.insurance_paid_by_customer and order.shipping.insurance_value > 0:
+        item_details.append({
+            "id": "INSURANCE",
+            "price": int(order.shipping.insurance_value),
+            "quantity": 1,
+            "name": "Asuransi Pengiriman",
+        })
+
+    if order.shipping.additional_cost > 0:
+        item_details.append({
+            "id": "ADDITIONAL_COST",
+            "price": int(order.shipping.additional_cost),
+            "quantity": 1,
+            "name": "Biaya Tambahan",
+        })
+
+    if order.shipping.service_fee > 0:
+        item_details.append({
+            "id": "SERVICE",
+            "price": int(order.shipping.service_fee),
+            "quantity": 1,
+            "name": "Biaya Servis",
+        })
+
+    return item_details
+
+
+def validate_gross_amount(item_details, order):
+    """Raise jika total item_details tidak cocok dengan order.grand_total."""
+    gross_amount = sum(item["price"] * item["quantity"] for item in item_details)
+    if gross_amount != order.grand_total:
+        logger_error.error(
+            f"Mismatch gross_amount: {gross_amount} vs grand_total: {order.grand_total}, "
+            f"order_id: {order.order_id}"
+        )
+        raise GrossAmountMismatch()  # custom exception, bukan return Response — biar bisa di-raise dalam atomic block
+    return gross_amount
+
+
+def build_midtrans_payload(order, checkout, item_details, gross_amount):
+    """Bangun payload transaksi untuk Midtrans Snap API."""
+    return {
+        "transaction_details": {
+            "order_id": str(order.order_id),
+            "gross_amount": gross_amount,
+        },
+        "enabled_payments": [
+            "gopay", "shopeepay", "qris", "bank_transfer", "cstore", "echannel",
+        ],
+        "item_details": item_details,
+        "customer_details": {
+            "first_name": checkout.user.username,
+            "email": checkout.user.email,
+            "phone": str(checkout.user.phone_number),
+        },
+    }

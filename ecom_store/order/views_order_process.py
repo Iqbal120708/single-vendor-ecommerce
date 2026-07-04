@@ -25,7 +25,11 @@ from .utils import (
     get_destination,
     get_valid_carts,
     get_valid_checkout,
-    RajaOngkirException
+    RajaOngkirException,
+    GrossAmountMismatch,
+    build_item_details,
+    validate_gross_amount,
+    build_midtrans_payload
 )
 from .utils_midtrans import (
     InvalidMidtransPayload,
@@ -145,28 +149,36 @@ class ShippingRates(APIView):
 
         return Response({"shipping_options": shipping_options})
 
-
 class TransactionView(APIView):
     def post(self, request):
         serializer = ShippingSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        checkout_id = serializer.validated_data.get("checkout_id")
         logger.info(
-            f"User {request.user.id} membuat transaksi untuk checkout_id: {serializer.validated_data["checkout_id"]}"
+            f"User {request.user.id} membuat transaksi untuk checkout_id: {checkout_id}"
         )
 
-        checkout_id = serializer.validated_data.get("checkout_id")
-        checkout = get_valid_checkout(request.user, checkout_id)
-
+        checkout = get_valid_checkout(request.user, checkout_id)  # raise ke framework kalau invalid
         order = checkout.order
         order_item = order.items.all().select_related("product")
 
         try:
-            order_shipping = OrderShippingService(
-                order, serializer.validated_data, checkout
-            ).execute()
-            order.refresh_from_db()
+            with transaction.atomic():
+                OrderShippingService(
+                    order, serializer.validated_data, checkout
+                ).execute()
+                order.refresh_from_db()
+
+                item_details = build_item_details(order, order_item, checkout)
+                gross_amount = validate_gross_amount(item_details, order)
+                payload = build_midtrans_payload(order, checkout, item_details, gross_amount)
+
+        except GrossAmountMismatch:
+            # sudah di-log di dalam validate_gross_amount, tidak perlu log ulang di sini
+            raise 
         except Exception as e:
+            # error dari OrderShippingService.execute() atau hal tak terduga lain di dalam atomic block
             logger_error.error(
                 f"Gagal membuat order shipping untuk user {request.user.id}: {e}",
                 extra={
@@ -180,91 +192,21 @@ class TransactionView(APIView):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        item_details = []
-
-        # Produk
-        for item in order_item:
-            item_details.append(
-                {
-                    "id": item.product.name,
-                    "price": int(item.product_price),
-                    "quantity": item.qty,
-                    "name": item.product.name,
-                }
-            )
-
-        # Ongkir
-        item_details.append(
-            {
-                "id": "SHIPPING",
-                "price": order.shipping.shipping_cost,
-                "quantity": 1,
-                "name": f"Ongkir {order.shipping.shipping_name} {order.shipping.service_name}",
-            }
-        )
-
-        if (
-            checkout.store.insurance_paid_by_customer
-            and order.shipping.insurance_value > 0
-        ):
-            item_details.append(
-                {
-                    "id": "INSURANCE",
-                    "price": int(order.shipping.insurance_value),
-                    "quantity": 1,
-                    "name": "Asuransi Pengiriman",
-                }
-            )
-
-        if order.shipping.additional_cost > 0:
-            item_details.append(
-                {
-                    "id": "ADDITIONAL COST",
-                    "price": int(order.shipping.additional_cost),
-                    "quantity": 1,
-                    "name": "Biaya Tambahan",
-                }
-            )
-
-        if order.shipping.service_fee > 0:
-            item_details.append(
-                {
-                    "id": "SERVICE",
-                    "price": int(order.shipping.service_fee),
-                    "quantity": 1,
-                    "name": "Biaya Servis",
-                }
-            )
-
-        gross_amount = sum(item["price"] * item["quantity"] for item in item_details)
-        if gross_amount != order.grand_total:
+        try:
+            snap_token = snap.create_transaction(payload)["token"]
+        except Exception as e:
             logger_error.error(
-                f"Mismatch gross_amount: {gross_amount} vs grand_total: {order.grand_total}, order_id: {order.order_id}"
+                f"Gagal membuat transaksi Midtrans untuk order {order.order_id}, user {request.user.id}: {e}",
+                extra={
+                    "event_type": "transaction",
+                    "checkout_id": checkout.id,
+                    "order_id": order.order_id,
+                },
             )
-            return error_response("Terjadi kesalahan kalkulasi order.", status_code=500)
-
-        transaction = {
-            "transaction_details": {
-                "order_id": str(order.order_id),
-                "gross_amount": gross_amount,
-            },
-            "enabled_payments": [
-                "gopay",
-                "shopeepay",
-                "qris",
-                "bank_transfer",
-                "cstore",
-                "echannel",
-            ],
-            "item_details": item_details,
-            "customer_details": {
-                "first_name": checkout.user.username,
-                "email": checkout.user.email,
-                "phone": str(checkout.user.phone_number),
-            },
-        }
-
-        snap_token = snap.create_transaction(transaction)["token"]
+            return error_response(
+                "Gagal membuat transaksi pembayaran, silakan coba lagi.",
+                status_code=status.HTTP_502_BAD_GATEWAY,
+            )
 
         logger.info(
             f"Transaksi Midtrans untuk order ID {order.order_id} dibuat untuk User {request.user.id}."

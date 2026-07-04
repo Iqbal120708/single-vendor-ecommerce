@@ -5,7 +5,7 @@ from django.db import transaction
 from order.models import Order, OrderItem, OrderShipping, ShippingInsurance
 
 
-def calculate_insurance(order, order_shipping):
+def calculate_insurance(order, shipping_name):
     total_item_value = int(sum(item.subtotal for item in order.items.all()))
 
     use_insurance = (
@@ -18,7 +18,7 @@ def calculate_insurance(order, order_shipping):
 
     try:
         shipping_insurance = ShippingInsurance.objects.get(
-            shipping=order_shipping.shipping_name
+            shipping=shipping_name
         )
 
         rate = shipping_insurance.rate
@@ -37,7 +37,7 @@ def calculate_grand_total(order, order_shipping):
     insurance_cost = 0
 
     if order.store.insurance_paid_by_customer:
-        insurance_cost = calculate_insurance(order, order_shipping)
+        insurance_cost = int(order_shipping.insurance_value)
 
     return (
         subtotal
@@ -84,22 +84,24 @@ class OrderShippingService:
         self.order_shipping = None
 
     def create_order_shipping(self):
-        self.order_shipping = OrderShipping.objects.create(
+        self.order_shipping, _ = OrderShipping.objects.update_or_create(
             order=self.order,
-            shipping_name=self.serializer_data["shipping_name"],
-            service_name=self.serializer_data["service_name"],
-            shipping_weight=self.serializer_data["shipping_weight"],
-            etd=self.serializer_data["etd"],
-            shipping_cost=self.serializer_data["shipping_cost"],
-            shipping_cashback=self.serializer_data["shipping_cashback"],
-            shipping_cost_net=self.serializer_data["shipping_cost_net"],
-            service_fee=self.serializer_data["service_fee"],
-            origin_ro=self.checkout.store.shipping_address.destination_id,
-            origin_address=self.checkout.store.shipping_address.formatted_address,
-            destination_ro=self.checkout.destination.destination_id,
-            destination_address=self.checkout.destination.formatted_address,
-            insurance_value=calculate_insurance(self.order, self.order_shipping),
-        )
+            defaults={
+                "shipping_name": self.serializer_data["shipping_name"],
+                "service_name": self.serializer_data["service_name"],
+                "shipping_weight": self.serializer_data["shipping_weight"],
+                "etd": self.serializer_data["etd"],
+                "shipping_cost": self.serializer_data["shipping_cost"],
+                "shipping_cashback": self.serializer_data["shipping_cashback"],
+                "shipping_cost_net": self.serializer_data["shipping_cost_net"],
+                "service_fee": self.serializer_data["service_fee"],
+                "origin_ro": self.checkout.store.shipping_address.destination_id,
+                "origin_address": self.checkout.store.shipping_address.formatted_address,
+                "destination_ro": self.checkout.destination.destination_id,
+                "destination_address": self.checkout.destination.formatted_address,
+                "insurance_value": calculate_insurance(self.order, self.serializer_data["shipping_name"]),
+            },
+    )
 
     def finalize_order(self):
         payment_method = (
@@ -124,14 +126,13 @@ class OrderShippingService:
             update_fields=[
                 "payment_method",
                 "grand_total",
-                "status",
                 "net_income",
                 "actual_net_income",
             ]
         )
 
     def execute(self):
-        with transaction.atomic():
-            self.create_order_shipping()
-            self.finalize_order()
+        # with transaction.atomic():
+        self.create_order_shipping()
+        self.finalize_order()
         return self.order_shipping
