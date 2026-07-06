@@ -5,6 +5,7 @@ from datetime import timedelta
 from config.exceptions import error_response
 from config.midtrans import snap
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.db import transaction
 
 # from django.http import JsonResponse
@@ -19,22 +20,22 @@ from store.models import Store
 from .models import CheckoutSession, Order
 from .serializers import ShippingSerializer
 from .services.checkout import CheckoutService
+from .services.midtrans import (
+    InvalidMidtransPayload,
+    InvalidMidtransSignature,
+    WebhookMidtrans,
+)
 from .services.order import OrderService, OrderShippingService
 from .utils import (
+    GrossAmountMismatch,
+    RajaOngkirException,
+    build_item_details,
+    build_midtrans_payload,
     fetch_shipping_rates_from_rajaongkir,
     get_destination,
     get_valid_carts,
     get_valid_checkout,
-    RajaOngkirException,
-    GrossAmountMismatch,
-    build_item_details,
     validate_gross_amount,
-    build_midtrans_payload
-)
-from .utils_midtrans import (
-    InvalidMidtransPayload,
-    InvalidMidtransSignature,
-    WebhookMidtrans,
 )
 
 # from django.core.exceptions import ValidationError
@@ -149,6 +150,7 @@ class ShippingRates(APIView):
 
         return Response({"shipping_options": shipping_options})
 
+
 class TransactionView(APIView):
     def post(self, request):
         serializer = ShippingSerializer(data=request.data)
@@ -159,7 +161,9 @@ class TransactionView(APIView):
             f"User {request.user.id} membuat transaksi untuk checkout_id: {checkout_id}"
         )
 
-        checkout = get_valid_checkout(request.user, checkout_id)  # raise ke framework kalau invalid
+        checkout = get_valid_checkout(
+            request.user, checkout_id
+        )  # raise ke framework kalau invalid
         order = checkout.order
         order_item = order.items.all().select_related("product")
 
@@ -172,11 +176,13 @@ class TransactionView(APIView):
 
                 item_details = build_item_details(order, order_item, checkout)
                 gross_amount = validate_gross_amount(item_details, order)
-                payload = build_midtrans_payload(order, checkout, item_details, gross_amount)
+                payload = build_midtrans_payload(
+                    order, checkout, item_details, gross_amount
+                )
 
         except GrossAmountMismatch:
             # sudah di-log di dalam validate_gross_amount, tidak perlu log ulang di sini
-            raise 
+            raise
         except Exception as e:
             # error dari OrderShippingService.execute() atau hal tak terduga lain di dalam atomic block
             logger_error.error(
@@ -262,9 +268,26 @@ class MidtransWebhookView(APIView):
                     },
                 )
                 return Response({"detail": "Terjadi kesalahan"}, status=500)
+        else:
+            try:
+                with transaction.atomic():
+                    webhook_midtrans.reverse_stock()
+                    if (
+                        webhook_midtrans.new_status == "failed"
+                        and webhook_midtrans.old_status not in ("paid", "failed")
+                    ):
+                        webhook_midtrans.release_reservation()
+            except Exception:
+                logger_error.critical(
+                    "Reversal terjadi tapi reverse_stock gagal - butuh review manual",
+                    extra={
+                        "event_type": "transaction",
+                        "order_id": webhook_midtrans.order.order_id,
+                    },
+                )
+                return Response({"detail": "Terjadi kesalahan"}, status=500)
 
         logger.info(
             f"Transaksi Midtrans untuk order id {payload['order_id']} berhasil di proses"
         )
-
         return Response({"detail": "OK"}, status=200)

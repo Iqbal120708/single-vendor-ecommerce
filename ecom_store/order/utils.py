@@ -20,14 +20,17 @@ class RajaOngkirException(APIException):
     status_code = 502
     default_detail = "Shipping service unavailable."
 
+
 class CheckoutExpired(APIException):
     status_code = 408
     default_detail = "Sesi telah berakhir atau tidak ditemukan. Silakan ulangi proses (Maks. 10 menit)."
-    
+
+
 class GrossAmountMismatch(APIException):
     status_code = 500
     default_detail = "Terjadi kesalahan kalkulasi order."
     default_code = "gross_amount_mismatch"
+
 
 logger = logging.getLogger("order")
 logger_error = logging.getLogger("order_error")
@@ -47,7 +50,7 @@ def extract_min_etd(etd):
     match = re.search(r"\d+", etd)
     if match is None:
         return 999
-        
+
     return int(match.group())
 
 
@@ -310,6 +313,21 @@ def reduce_product_stock(order_items):
         product.save(update_fields=["stock", "reserved_stock"])
 
 
+def restore_product_stock(order_items):
+    product_ids = order_items.values_list("product_id", flat=True)
+
+    products = (
+        Product.objects.select_for_update().filter(id__in=product_ids).order_by("id")
+    )
+
+    product_map = {p.id: p for p in products}
+
+    for item in order_items:
+        product = product_map[item.product_id]
+        product.stock += item.qty
+        product.save(update_fields=["stock"])
+
+
 def get_valid_checkout(user, checkout_id):
     try:
         checkout = (
@@ -373,48 +391,59 @@ def create_order_details(order_items):
 
     return order_details
 
+
 def build_item_details(order, order_items, checkout):
     """Bangun list item_details untuk payload Midtrans dari order + shipping."""
     item_details = []
 
     for item in order_items:
-        item_details.append({
-            "id": str(item.product.id),
-            "price": int(item.product_price),
-            "quantity": item.qty,
-            "name": item.product.name,
-        })
+        item_details.append(
+            {
+                "id": str(item.product.id),
+                "price": int(item.product_price),
+                "quantity": item.qty,
+                "name": item.product.name,
+            }
+        )
 
-    item_details.append({
-        "id": "SHIPPING",
-        "price": int(order.shipping.shipping_cost),
-        "quantity": 1,
-        "name": f"Ongkir {order.shipping.shipping_name} {order.shipping.service_name}",
-    })
+    item_details.append(
+        {
+            "id": "SHIPPING",
+            "price": int(order.shipping.shipping_cost),
+            "quantity": 1,
+            "name": f"Ongkir {order.shipping.shipping_name} {order.shipping.service_name}",
+        }
+    )
 
     if checkout.store.insurance_paid_by_customer and order.shipping.insurance_value > 0:
-        item_details.append({
-            "id": "INSURANCE",
-            "price": int(order.shipping.insurance_value),
-            "quantity": 1,
-            "name": "Asuransi Pengiriman",
-        })
+        item_details.append(
+            {
+                "id": "INSURANCE",
+                "price": int(order.shipping.insurance_value),
+                "quantity": 1,
+                "name": "Asuransi Pengiriman",
+            }
+        )
 
     if order.shipping.additional_cost > 0:
-        item_details.append({
-            "id": "ADDITIONAL_COST",
-            "price": int(order.shipping.additional_cost),
-            "quantity": 1,
-            "name": "Biaya Tambahan",
-        })
+        item_details.append(
+            {
+                "id": "ADDITIONAL_COST",
+                "price": int(order.shipping.additional_cost),
+                "quantity": 1,
+                "name": "Biaya Tambahan",
+            }
+        )
 
     if order.shipping.service_fee > 0:
-        item_details.append({
-            "id": "SERVICE",
-            "price": int(order.shipping.service_fee),
-            "quantity": 1,
-            "name": "Biaya Servis",
-        })
+        item_details.append(
+            {
+                "id": "SERVICE",
+                "price": int(order.shipping.service_fee),
+                "quantity": 1,
+                "name": "Biaya Servis",
+            }
+        )
 
     return item_details
 
@@ -439,7 +468,12 @@ def build_midtrans_payload(order, checkout, item_details, gross_amount):
             "gross_amount": gross_amount,
         },
         "enabled_payments": [
-            "gopay", "shopeepay", "qris", "bank_transfer", "cstore", "echannel",
+            "gopay",
+            "shopeepay",
+            "qris",
+            "bank_transfer",
+            "cstore",
+            "echannel",
         ],
         "item_details": item_details,
         "customer_details": {
