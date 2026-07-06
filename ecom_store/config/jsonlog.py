@@ -1,7 +1,9 @@
 import json
 import logging
 import traceback
+
 from django.core.serializers.json import DjangoJSONEncoder
+
 
 class JSONFormatter(logging.Formatter):
     def format(self, record):

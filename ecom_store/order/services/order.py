@@ -17,9 +17,7 @@ def calculate_insurance(order, shipping_name):
         return 0
 
     try:
-        shipping_insurance = ShippingInsurance.objects.get(
-            shipping=shipping_name
-        )
+        shipping_insurance = ShippingInsurance.objects.get(shipping=shipping_name)
 
         rate = shipping_insurance.rate
         admin_fee = shipping_insurance.admin_fee
@@ -99,9 +97,11 @@ class OrderShippingService:
                 "origin_address": self.checkout.store.shipping_address.formatted_address,
                 "destination_ro": self.checkout.destination.destination_id,
                 "destination_address": self.checkout.destination.formatted_address,
-                "insurance_value": calculate_insurance(self.order, self.serializer_data["shipping_name"]),
+                "insurance_value": calculate_insurance(
+                    self.order, self.serializer_data["shipping_name"]
+                ),
             },
-    )
+        )
 
     def finalize_order(self):
         payment_method = (

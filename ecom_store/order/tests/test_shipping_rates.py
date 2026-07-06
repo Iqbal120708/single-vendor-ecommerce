@@ -1,19 +1,18 @@
 from datetime import timedelta
-from unittest.mock import patch, MagicMock
-
-from django.test import TestCase
-from django.utils.timezone import now, timedelta
-from rest_framework.test import APIRequestFactory, force_authenticate
-from rest_framework.exceptions import NotFound
-
-from order.utils import get_valid_checkout, get_best_shipping, CheckoutExpired
-from order.views_order_process import (
-    ShippingRates,
-    fetch_shipping_rates_from_rajaongkir,
-    RajaOngkirException,
-)
+from unittest.mock import MagicMock, patch
 
 import requests
+from django.test import TestCase
+from django.utils.timezone import now, timedelta
+from order.utils import CheckoutExpired, get_best_shipping, get_valid_checkout
+from order.views_order_process import (
+    RajaOngkirException,
+    ShippingRates,
+    fetch_shipping_rates_from_rajaongkir,
+)
+from rest_framework.exceptions import NotFound
+from rest_framework.test import APIRequestFactory, force_authenticate
+
 
 # =====================================================================
 # get_best_shipping
@@ -40,7 +39,12 @@ class GetBestShippingTests(TestCase):
         """
         mock_active.return_value = []
         shippings = [
-            {"shipping_name": "JNE", "etd": "2-3 day", "shipping_cost_net": 10000, "is_cod": False}
+            {
+                "shipping_name": "JNE",
+                "etd": "2-3 day",
+                "shipping_cost_net": 10000,
+                "is_cod": False,
+            }
         ]
         result = get_best_shipping(shippings, is_cod=False)
         self.assertIsNone(result)
@@ -52,8 +56,18 @@ class GetBestShippingTests(TestCase):
         Assert: harus return shipping dengan shipping_cost_net paling rendah.
         """
         shippings = [
-            {"shipping_name": "JNE", "etd": "2-3 day", "shipping_cost_net": 15000, "is_cod": False},
-            {"shipping_name": "SICEPAT", "etd": "1-2 day", "shipping_cost_net": 10000, "is_cod": False},
+            {
+                "shipping_name": "JNE",
+                "etd": "2-3 day",
+                "shipping_cost_net": 15000,
+                "is_cod": False,
+            },
+            {
+                "shipping_name": "SICEPAT",
+                "etd": "1-2 day",
+                "shipping_cost_net": 10000,
+                "is_cod": False,
+            },
         ]
         mock_active.return_value = shippings
         result = get_best_shipping(shippings, is_cod=False)
@@ -66,8 +80,18 @@ class GetBestShippingTests(TestCase):
         Assert: harus pilih yang etd (extract_min_etd) paling kecil, sebagai tie-breaker kedua.
         """
         shippings = [
-            {"shipping_name": "JNE", "etd": "3-5 day", "shipping_cost_net": 10000, "is_cod": False},
-            {"shipping_name": "SICEPAT", "etd": "1-2 day", "shipping_cost_net": 10000, "is_cod": False},
+            {
+                "shipping_name": "JNE",
+                "etd": "3-5 day",
+                "shipping_cost_net": 10000,
+                "is_cod": False,
+            },
+            {
+                "shipping_name": "SICEPAT",
+                "etd": "1-2 day",
+                "shipping_cost_net": 10000,
+                "is_cod": False,
+            },
         ]
         mock_active.return_value = shippings
         result = get_best_shipping(shippings, is_cod=False)
@@ -82,7 +106,12 @@ class GetBestShippingTests(TestCase):
         "if valid_shippings: shippings = valid_shippings" yang skip kalau kosong.
         """
         shippings = [
-            {"shipping_name": "JNE", "etd": "-", "shipping_cost_net": 10000, "is_cod": False},
+            {
+                "shipping_name": "JNE",
+                "etd": "-",
+                "shipping_cost_net": 10000,
+                "is_cod": False,
+            },
         ]
         mock_active.return_value = shippings
         result = get_best_shipping(shippings, is_cod=False)
@@ -99,7 +128,12 @@ class GetBestShippingTests(TestCase):
         tidak ada opsi COD.
         """
         shippings = [
-            {"shipping_name": "JNE", "etd": "2-3 day", "shipping_cost_net": 10000, "is_cod": False},
+            {
+                "shipping_name": "JNE",
+                "etd": "2-3 day",
+                "shipping_cost_net": 10000,
+                "is_cod": False,
+            },
         ]
         mock_active.return_value = shippings
         result = get_best_shipping(shippings, is_cod=True)
@@ -113,13 +147,23 @@ class GetBestShippingTests(TestCase):
         non-COD yang lebih murah.
         """
         shippings = [
-            {"shipping_name": "JNE", "etd": "2-3 day", "shipping_cost_net": 5000, "is_cod": False},
-            {"shipping_name": "SICEPAT", "etd": "2-3 day", "shipping_cost_net": 20000, "is_cod": True},
+            {
+                "shipping_name": "JNE",
+                "etd": "2-3 day",
+                "shipping_cost_net": 5000,
+                "is_cod": False,
+            },
+            {
+                "shipping_name": "SICEPAT",
+                "etd": "2-3 day",
+                "shipping_cost_net": 20000,
+                "is_cod": True,
+            },
         ]
         mock_active.return_value = shippings
         result = get_best_shipping(shippings, is_cod=True)
         self.assertEqual(result["shipping_name"], "SICEPAT")
-        
+
 
 # =====================================================================
 # get_valid_checkout
@@ -128,7 +172,9 @@ class GetValidCheckoutTests(TestCase):
 
     @patch("order.utils.logger_error")
     @patch("order.utils.CheckoutSession")
-    def test_raise_not_found_when_checkout_does_not_exist(self, mock_checkout_model, mock_logger_error):
+    def test_raise_not_found_when_checkout_does_not_exist(
+        self, mock_checkout_model, mock_logger_error
+    ):
         """
         Test: checkout_id tidak ditemukan untuk user tsb (DoesNotExist).
         Assert: harus raise NotFound (bukan return Response), dan logger_error
@@ -249,7 +295,9 @@ class FetchShippingRatesFromRajaongkirTests(TestCase):
 
     @patch("order.utils.get_best_shipping")
     @patch("requests.get")
-    def test_return_dict_with_three_shipping_types_on_success(self, mock_get, mock_best_shipping):
+    def test_return_dict_with_three_shipping_types_on_success(
+        self, mock_get, mock_best_shipping
+    ):
         """
         Test: response sukses dengan data calculate_reguler, calculate_cargo,
         calculate_instant lengkap.
@@ -267,7 +315,9 @@ class FetchShippingRatesFromRajaongkirTests(TestCase):
             },
         }
         mock_get.return_value = mock_response
-        mock_best_shipping.side_effect = lambda shippings, is_cod: shippings[0] if shippings else None
+        mock_best_shipping.side_effect = lambda shippings, is_cod: (
+            shippings[0] if shippings else None
+        )
 
         result = fetch_shipping_rates_from_rajaongkir({}, is_cod=False)
 
@@ -278,7 +328,9 @@ class FetchShippingRatesFromRajaongkirTests(TestCase):
 
     @patch("order.utils.get_best_shipping")
     @patch("requests.get")
-    def test_return_none_values_when_data_keys_missing(self, mock_get, mock_best_shipping):
+    def test_return_none_values_when_data_keys_missing(
+        self, mock_get, mock_best_shipping
+    ):
         """
         Test: response sukses tapi data tidak punya key calculate_reguler/cargo/instant
         sama sekali (payload minimal).
@@ -324,21 +376,31 @@ class ShippingRatesViewTests(TestCase):
 
     @patch("order.views_order_process.fetch_shipping_rates_from_rajaongkir")
     @patch("order.views_order_process.get_valid_checkout")
-    def test_return_200_with_shipping_options_on_success(self, mock_get_checkout, mock_fetch):
+    def test_return_200_with_shipping_options_on_success(
+        self, mock_get_checkout, mock_fetch
+    ):
         """
         Test: checkout valid, fetch_shipping_rates_from_rajaongkir sukses return data.
         Assert: response status 200 dan body berisi key "shipping_options" sesuai
         hasil fetch.
         """
         mock_get_checkout.return_value = self._build_mock_checkout()
-        mock_fetch.return_value = {"reguler": {"shipping_name": "JNE"}, "cargo": None, "instant": None}
+        mock_fetch.return_value = {
+            "reguler": {"shipping_name": "JNE"},
+            "cargo": None,
+            "instant": None,
+        }
 
-        request = self.factory.post("/shipping-rates/", {"checkout_id": 1, "is_cod": False})
+        request = self.factory.post(
+            "/shipping-rates/", {"checkout_id": 1, "is_cod": False}
+        )
         force_authenticate(request, user=self.user)
         response = ShippingRates.as_view()(request)
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["shipping_options"]["reguler"]["shipping_name"], "JNE")
+        self.assertEqual(
+            response.data["shipping_options"]["reguler"]["shipping_name"], "JNE"
+        )
 
     @patch("order.views_order_process.get_valid_checkout")
     def test_propagate_not_found_when_checkout_invalid(self, mock_get_checkout):
@@ -349,7 +411,9 @@ class ShippingRatesViewTests(TestCase):
         """
         mock_get_checkout.side_effect = NotFound("CheckoutSession tidak ditemukan")
 
-        request = self.factory.post("/shipping-rates/", {"checkout_id": 999, "is_cod": False})
+        request = self.factory.post(
+            "/shipping-rates/", {"checkout_id": 999, "is_cod": False}
+        )
         force_authenticate(request, user=self.user)
         response = ShippingRates.as_view()(request)
 
@@ -363,7 +427,9 @@ class ShippingRatesViewTests(TestCase):
         """
         mock_get_checkout.side_effect = CheckoutExpired()
 
-        request = self.factory.post("/shipping-rates/", {"checkout_id": 1, "is_cod": False})
+        request = self.factory.post(
+            "/shipping-rates/", {"checkout_id": 1, "is_cod": False}
+        )
         force_authenticate(request, user=self.user)
         response = ShippingRates.as_view()(request)
 
@@ -385,7 +451,9 @@ class ShippingRatesViewTests(TestCase):
         mock_get_checkout.return_value = self._build_mock_checkout()
         mock_fetch.side_effect = RajaOngkirException("Shipping provider timeout.")
 
-        request = self.factory.post("/shipping-rates/", {"checkout_id": 1, "is_cod": False})
+        request = self.factory.post(
+            "/shipping-rates/", {"checkout_id": 1, "is_cod": False}
+        )
         force_authenticate(request, user=self.user)
         response = ShippingRates.as_view()(request)
 
@@ -396,7 +464,9 @@ class ShippingRatesViewTests(TestCase):
 
     @patch("order.views_order_process.fetch_shipping_rates_from_rajaongkir")
     @patch("order.views_order_process.get_valid_checkout")
-    def test_calculate_total_weight_and_price_from_multiple_items(self, mock_get_checkout, mock_fetch):
+    def test_calculate_total_weight_and_price_from_multiple_items(
+        self, mock_get_checkout, mock_fetch
+    ):
         """
         Test: order punya lebih dari 1 item dengan qty berbeda-beda.
         Assert: params yang dikirim ke fetch_shipping_rates_from_rajaongkir harus
@@ -416,7 +486,9 @@ class ShippingRatesViewTests(TestCase):
         mock_get_checkout.return_value = checkout
         mock_fetch.return_value = {"reguler": None, "cargo": None, "instant": None}
 
-        request = self.factory.post("/shipping-rates/", {"checkout_id": 1, "is_cod": False})
+        request = self.factory.post(
+            "/shipping-rates/", {"checkout_id": 1, "is_cod": False}
+        )
         force_authenticate(request, user=self.user)
         ShippingRates.as_view()(request)
 
@@ -460,6 +532,3 @@ class ShippingRatesViewTests(TestCase):
 
     #     called_params = mock_fetch.call_args[0][0]
     #     self.assertEqual(called_params["cod"], "no")
-        
-        
-

@@ -1,5 +1,5 @@
 from datetime import timedelta
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from cart.models import Cart
 from django.core.management import call_command
@@ -17,6 +17,7 @@ from .helper_setup import (
     set_store_shipping_option,
     set_user,
 )
+
 
 class ShippingRatesIntegrationTest(TransactionTestCase):
     """

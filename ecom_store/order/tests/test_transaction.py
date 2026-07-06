@@ -268,44 +268,20 @@
 #             )
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-from unittest.mock import patch, MagicMock
-
-from django.test import TestCase, TransactionTestCase
 from datetime import timedelta
-from rest_framework.test import APIRequestFactory, force_authenticate
-from rest_framework.exceptions import NotFound
-
-from order.utils import CheckoutExpired, GrossAmountMismatch
-from order.views_order_process import TransactionView
+from unittest.mock import MagicMock, patch
 
 from cart.models import Cart
 from django.core.management import call_command
-from django.test import TransactionTestCase
+from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 from order.models import CheckoutSession, Order, OrderItem, OrderShipping
+from order.utils import CheckoutExpired, GrossAmountMismatch
+from order.views_order_process import TransactionView
 from product.models import Product
-from rest_framework.test import APIClient
+from rest_framework.exceptions import NotFound
+from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 
 from .helper_setup import (
     set_address,
@@ -314,6 +290,7 @@ from .helper_setup import (
     set_store_shipping_option,
     set_user,
 )
+
 
 # =====================================================================
 # TransactionView (APIView)
@@ -324,9 +301,7 @@ class TransactionViewTests(TestCase):
         self.factory = APIRequestFactory()
         self.user = MagicMock()
 
-        self.logger_patcher = patch(
-            "order.views_order_process.logger"
-        )
+        self.logger_patcher = patch("order.views_order_process.logger")
         self.mock_logger = self.logger_patcher.start()
         self.addCleanup(self.logger_patcher.stop)
 
@@ -555,7 +530,9 @@ class TransactionViewTests(TestCase):
         checkout, order = self._build_mock_checkout(has_shipping=False)
         mock_get_checkout.return_value = checkout
         mock_service_cls.return_value.execute.return_value = MagicMock()
-        mock_build_items.return_value = [{"id": "X", "price": 1, "quantity": 1, "name": "X"}]
+        mock_build_items.return_value = [
+            {"id": "X", "price": 1, "quantity": 1, "name": "X"}
+        ]
         mock_validate_gross.side_effect = GrossAmountMismatch()
 
         request = self.factory.post("/transaction/", self._valid_payload())
@@ -614,7 +591,7 @@ class TransactionViewTests(TestCase):
         # order.shipping di except block snap.
         self.assertIsNotNone(order.shipping)
         self.assertEqual(order.shipping.shipping_name, "JNE")
-        
+
     @patch("order.views_order_process.snap")
     @patch("order.views_order_process.OrderShippingService")
     @patch("order.views_order_process.get_valid_checkout")
@@ -654,7 +631,6 @@ class TransactionViewTests(TestCase):
             i for i in sent_payload["item_details"] if i["name"] == "Kaos Polos"
         )
         self.assertEqual(product_item["id"], "5")
-        
 
 
 class TransactionViewIntegrationTest(TransactionTestCase):
@@ -677,15 +653,15 @@ class TransactionViewIntegrationTest(TransactionTestCase):
 
     def setUp(self):
         self.client = APIClient()
-        
+
         self.logger_patcher = patch("order.views_order_process.logger")
         self.mock_logger = self.logger_patcher.start()
         self.addCleanup(self.logger_patcher.stop)
-        
+
         self.auth_logger_patcher = patch("accounts.signals.logger")
         self.mock_auth_logger = self.auth_logger_patcher.start()
         self.addCleanup(self.auth_logger_patcher.stop)
-    
+
         call_command("seed_product")
 
         self.user = set_user()
@@ -745,7 +721,7 @@ class TransactionViewIntegrationTest(TransactionTestCase):
             "is_cod": False,
             "net_income": 90000,
         }
-        
+
     @patch("order.views_order_process.snap")
     def test_happy_path_returns_snap_token_with_real_db(self, mock_snap):
         """
@@ -772,9 +748,7 @@ class TransactionViewIntegrationTest(TransactionTestCase):
         self.assertEqual(response.data["snap_token"], "snap-token-happy")
 
         self.order.refresh_from_db()
-        self.assertTrue(
-            OrderShipping.objects.filter(order=self.order).exists()
-        )
+        self.assertTrue(OrderShipping.objects.filter(order=self.order).exists())
         self.assertEqual(self.order.shipping.shipping_name, "JNE")
         self.assertGreater(self.order.grand_total, 0)
 
@@ -789,7 +763,9 @@ class TransactionViewIntegrationTest(TransactionTestCase):
 
     @patch("order.views_order_process.logger_error")
     @patch("order.views_order_process.snap")
-    def test_shipping_record_persists_in_db_when_midtrans_fails(self, mock_snap, mock_logger_error):
+    def test_shipping_record_persists_in_db_when_midtrans_fails(
+        self, mock_snap, mock_logger_error
+    ):
         """
         Test: OrderShippingService.execute() benar-benar menulis
         OrderShipping ke DB (bukan mock), lalu snap.create_transaction
@@ -810,12 +786,10 @@ class TransactionViewIntegrationTest(TransactionTestCase):
         self.assertEqual(response.status_code, 502)
 
         self.order.refresh_from_db()
-        self.assertTrue(
-            OrderShipping.objects.filter(order=self.order).exists()
-        )
+        self.assertTrue(OrderShipping.objects.filter(order=self.order).exists())
         self.assertIsNotNone(self.order.shipping)
         mock_logger_error.error.assert_called_once()
-    
+
     @patch("order.views_order_process.logger_error")
     @patch("order.views_order_process.snap")
     @patch("order.services.order.calculate_insurance")
@@ -845,11 +819,11 @@ class TransactionViewIntegrationTest(TransactionTestCase):
         # shipping record tersimpan tapi user perlu retry.
         mock_calculate_insurance.return_value = 5000
         mock_snap.create_transaction.side_effect = Exception("Midtrans timeout")
-        
+
         response_1 = self.client.post(
             reverse("transaction"), self._valid_payload(), format="json"
         )
-        
+
         self.assertEqual(response_1.status_code, 502)
 
         self.order.refresh_from_db()
@@ -877,4 +851,3 @@ class TransactionViewIntegrationTest(TransactionTestCase):
         self.order.refresh_from_db()
         self.assertNotEqual(self.order.grand_total, grand_total_attempt_1)
         self.assertEqual(self.order.shipping.insurance_value, 8000)
-        
