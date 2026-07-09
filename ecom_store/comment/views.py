@@ -33,8 +33,29 @@ class CommentView(APIView):
         if not order.exists():
             raise PermissionDenied("User belum pernah membeli product")
 
+        existing_comment = Comment.objects.filter(
+            user=request.user, product=product
+        ).first()
+        if existing_comment and not existing_comment.is_archived:
+            return Response(
+                {"detail": "Anda sudah pernah memberi komentar untuk produk ini"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         data = request.data.copy()
         data["product_id"] = product.id
+
+        if existing_comment:
+            # Row lama sudah di-archive (soft-deleted). unique_together
+            # (user, product) di level database tidak membedakan
+            # archived/tidak, jadi row lama harus di-reuse (di-update
+            # dan di-unarchive), bukan bikin row Comment baru.
+            serializer = CommentSerializer(
+                existing_comment, data=data, context={"request": request}
+            )
+            serializer.is_valid(raise_exception=True)
+            serializer.save(is_archived=False)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         serializer = CommentSerializer(data=data, context={"request": request})
         serializer.is_valid(raise_exception=True)
@@ -44,7 +65,7 @@ class CommentView(APIView):
 
     def put(self, request, product_id):
         comment = Comment.objects.filter(
-            user=request.user, product__id=product_id
+            user=request.user, product__id=product_id, is_archived=False
         ).first()
         if not comment:
             return Response(
@@ -65,7 +86,7 @@ class CommentView(APIView):
 
     def delete(self, request, product_id):
         comment = Comment.objects.filter(
-            user=request.user, product__id=product_id
+            user=request.user, product__id=product_id, is_archived=False
         ).first()
         if not comment:
             return Response(

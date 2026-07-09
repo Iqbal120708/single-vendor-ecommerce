@@ -22,12 +22,12 @@ def set_location_fields():
     return province, city, district
 
 
-def set_user():
+def set_user(username="test", email="test@gmail.com", phone_number="089384442947"):
     user = User.objects.create_user(
-        username="test",
-        email="test@gmail.com",
+        username=username,
+        email=email,
         password="test2938484jr",
-        phone_number="089384442947",
+        phone_number=phone_number,
     )
     EmailAddress.objects.create(
         user=user, email=user.email, verified=True, primary=True
