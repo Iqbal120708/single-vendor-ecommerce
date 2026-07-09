@@ -18,6 +18,7 @@ from shipping_address.models import (
     ShippingAddress,
     SubDistrict,
 )
+import json
 
 User = get_user_model()
 
@@ -74,12 +75,15 @@ class TestAddress(APITestCase):
                 "subdistrict_name": "nd",
                 "zip_code": "djfjfj",
                 "street_address": "nd",
+                "latitude": 8.5899,
+                'longitude': 116.1107
             },
         )
 
         self.assertEqual(res_post.status_code, 400)
 
-        data = res_post.data
+        response = res_post.content
+        data = json.loads(response)
 
         self.assertEqual(data["zip_code"][0], "Zip code must be digits.")
 
@@ -96,12 +100,15 @@ class TestAddress(APITestCase):
                 "subdistrict_name": "nd",
                 "zip_code": "12455",
                 "street_address": "nd",
+                "latitude": 8.5899,
+                'longitude': 116.1107
             },
         )
 
         self.assertEqual(res_post.status_code, 400)
 
-        data = res_post.data
+        response = res_post.content
+        data = json.loads(response)
 
         self.assertEqual(data["province_name"][0], "Province not found.")
 
@@ -118,12 +125,15 @@ class TestAddress(APITestCase):
                 "subdistrict_name": "nd",
                 "zip_code": "12455",
                 "street_address": "nd",
+                "latitude": 8.5899,
+                'longitude': 116.1107
             },
         )
 
         self.assertEqual(res_post.status_code, 400)
 
-        data = res_post.data
+        response = res_post.content
+        data = json.loads(response)
 
         self.assertEqual(data["city_name"][0], "City not found.")
 
@@ -140,13 +150,16 @@ class TestAddress(APITestCase):
                 "subdistrict_name": "nd",
                 "zip_code": "12455",
                 "street_address": "nd",
+                "latitude": 8.5899,
+                'longitude': 116.1107
             },
         )
 
         self.assertEqual(res_post.status_code, 400)
 
-        data = res_post.data
-
+        response = res_post.content
+        data = json.loads(response)
+        
         self.assertEqual(data["district_name"][0], "District not found.")
 
     @patch("accounts.signals.logger")
@@ -162,13 +175,16 @@ class TestAddress(APITestCase):
                 "subdistrict_name": "nd",
                 "zip_code": "12455",
                 "street_address": "nd",
+                "latitude": 8.5899,
+                'longitude': 116.1107
             },
         )
 
         self.assertEqual(res_post.status_code, 400)
 
-        data = res_post.data
-
+        response = res_post.content
+        data = json.loads(response)
+        
         self.assertEqual(data["subdistrict_name"][0], "Subdistrict not found.")
 
     @patch("accounts.signals.logger")
