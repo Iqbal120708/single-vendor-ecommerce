@@ -14,8 +14,17 @@ class CategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ["id", "name", "category_name", "stock", "price", "variant_name"]
-    list_filter = ["category__name"]
+    list_display = [
+        "id",
+        "name",
+        "category_name",
+        "stock",
+        "reserved_stock",
+        "available_stock",
+        "price",
+        "variant_name",
+    ]
+    list_filter = ["category__name", "reserved_stock"]
     search_fields = ["name", "category__name"]
     readonly_fields = ["created_at", "updated_at"]
     date_hierarchy = "created_at"
@@ -28,3 +37,8 @@ class ProductAdmin(admin.ModelAdmin):
         return obj.category.name
 
     category_name.short_description = "Category Name"
+
+    def available_stock(self, obj):
+        return obj.stock - obj.reserved_stock
+
+    available_stock.short_description = "Available Stock"

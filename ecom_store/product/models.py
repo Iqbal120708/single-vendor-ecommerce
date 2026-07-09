@@ -21,7 +21,15 @@ class Product(BaseModel):
     height = models.PositiveIntegerField(help_text="Product height in cm")
     length = models.PositiveIntegerField(help_text="Product length in cm")
     stock = models.PositiveIntegerField()
-    reserved_stock = models.PositiveIntegerField(default=0, blank=True)
+    reserved_stock = models.PositiveIntegerField(
+        default=0,
+        blank=True,
+        help_text=(
+            "Unit terkunci di checkout yang belum dibayar. Dikelola "
+            "otomatis, jangan edit manual jika tidak diperlukan. Stok bisa dijual = stock - "
+            "reserved_stock."
+        ),
+    )
     price = models.DecimalField(max_digits=18, decimal_places=2)
 
     def __str__(self):
