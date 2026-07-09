@@ -11,22 +11,23 @@ class GetOrderByFilter(APIView):
         status = request.query_params.get("status")
         payment_status = request.query_params.get("payment_status")
 
-        queryset = OrderItem.objects.select_related("order", "product")
-
-        filter_parameter = {"is_archived": False, "order__user": request.user}
-        if status:
-            queryset = queryset.filter(order__status=status, **filter_parameter)
-        elif payment_status:
-            queryset = queryset.filter(
-                order__payment_status=payment_status, **filter_parameter
-            )
-        else:
+        if not status and not payment_status:
             return Response(
                 {"detail": "Filter parameter required."},
                 status=rest_status.HTTP_400_BAD_REQUEST,
             )
 
-        queryset = queryset.order_by("-created_at")
+        filter_parameter = {"is_archived": False, "order__user": request.user}
+        if status:
+            filter_parameter["order__status"] = status
+        if payment_status:
+            filter_parameter["order__payment_status"] = payment_status
+
+        queryset = (
+            OrderItem.objects.select_related("order", "product")
+            .filter(**filter_parameter)
+            .order_by("-created_at")
+        )
         serializer = OrderItemSerializer(queryset, many=True)
         return Response(serializer.data)
 
@@ -39,27 +40,27 @@ class GetOrderDetail(APIView):
             "order__order_id": order_id,
         }
 
-        queryset = (
+        order_items = (
             OrderItem.objects.select_related("order", "product")
             .filter(**filter_parameter)
-            .first()
+            .order_by("created_at")
         )
-        if not queryset:
+        if not order_items.exists():
             return Response(
                 {"detail": "Order item not found"},
                 status=rest_status.HTTP_404_NOT_FOUND,
             )
 
-        order_serializer = OrderSerializer(queryset.order)
-        order_item_serializer = OrderItemSerializer(queryset)
+        order = order_items.first().order
+        order_serializer = OrderSerializer(order)
+        order_item_serializer = OrderItemSerializer(order_items, many=True)
 
-        order_item_data = dict(order_item_serializer.data)
-        order_item_data["orderitem_created_at"] = order_item_data.pop("created_at")
+        order_item_data = order_item_serializer.data
+        for item in order_item_data:
+            item.pop("order_id", None)
 
-        data = {
-            **order_serializer.data,
-            **order_item_data,
-        }
+        data = dict(order_serializer.data)
+        data["items"] = order_item_serializer.data
         return Response(data)
 
     def delete(self, request, order_id):
@@ -69,13 +70,12 @@ class GetOrderDetail(APIView):
             "order__order_id": order_id,
         }
 
-        queryset = OrderItem.objects.filter(**filter_parameter).first()
-        if not queryset:
+        order_items = OrderItem.objects.filter(**filter_parameter)
+        if not order_items.exists():
             return Response(
                 {"detail": "Order item not found"},
                 status=rest_status.HTTP_404_NOT_FOUND,
             )
 
-        queryset.is_archived = True
-        queryset.save()
+        order_items.update(is_archived=True)
         return Response(status=rest_status.HTTP_204_NO_CONTENT)

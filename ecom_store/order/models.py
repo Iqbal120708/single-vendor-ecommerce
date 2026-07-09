@@ -21,7 +21,7 @@ class ShippingInsurance(BaseModel):
     admin_fee = models.PositiveIntegerField(default=0)
 
     def __str__(self):
-        return self.courier_code
+        return self.shipping
 
 
 class Order(BaseModel):

@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.core.validators import MinValueValidator
 from rest_framework import serializers
 
-from .models import Order, OrderItem
+from .models import Order, OrderItem, OrderShipping
 
 
 class ShippingSerializer(serializers.Serializer):
@@ -34,7 +34,32 @@ class OrderItemSerializer(serializers.ModelSerializer):
         read_only_fields = ["qty", "created_at"]
 
 
+class OrderShippingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrderShipping
+        fields = [
+            "shipping_name",
+            "service_name",
+            "shipping_weight",
+            "etd",
+            "shipping_cost",
+            "shipping_cashback",
+            "shipping_cost_net",
+            "insurance_value",
+            "service_fee",
+            "additional_cost",
+            "origin_address",
+            "destination_address",
+            "order_no_ro",
+            "cod_value",
+            "tracking_number",
+        ]
+        read_only_fields = fields
+
+
 class OrderSerializer(serializers.ModelSerializer):
+    shipping = OrderShippingSerializer(read_only=True)
+
     class Meta:
         model = Order
         fields = [
@@ -45,17 +70,10 @@ class OrderSerializer(serializers.ModelSerializer):
             "delivered_at",
             "canceled_at",
             "created_at",
-            "courier_code",
-            "shipping_type",
-            "shipping_cost",
-            "shipping_cashback",
-            "origin_address",
-            "destination_address",
-            "order_no_ro",
-            "service_fee",
-            "insurance_value",
-            "cod_value",
             "grand_total",
+            "net_income",
+            "actual_net_income",
+            "shipping",
         ]
 
     def __init__(self, *args, **kwargs):
