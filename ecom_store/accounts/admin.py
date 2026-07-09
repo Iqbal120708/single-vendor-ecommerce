@@ -1,5 +1,5 @@
 from config.admin import SuperuserOnlyAdmin
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 
 
