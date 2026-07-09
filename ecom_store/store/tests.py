@@ -12,6 +12,7 @@ from shipping_address.models import (
     SubDistrict,
 )
 from store.models import Store
+from decimal import Decimal
 
 User = get_user_model()
 
@@ -52,6 +53,9 @@ class StoreTest(APITestCase):
             street_address="Jl. Dago No. 113",
             is_default=True,
             user=self.superuser,
+            destination_id=1,
+            latitude=-Decimal("8.5899"),
+            longitude=Decimal("116.1107"),
         )
 
         self.store = Store.objects.create(
