@@ -1,3 +1,4 @@
+from decimal import Decimal
 from unittest.mock import patch
 
 # from rest_framework.test import APITestCase
@@ -16,7 +17,6 @@ from shipping_address.models import (
     ShippingAddress,
     SubDistrict,
 )
-from decimal import Decimal
 
 User = get_user_model()
 
@@ -276,7 +276,7 @@ class TestAddress(TransactionTestCase):
                 "longitude": 116.1107,
             },
         )
-        
+
         self.assertEqual(res_post.status_code, 201)
 
         res = self.client.get(reverse("shipping_address"))

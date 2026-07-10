@@ -183,17 +183,17 @@ class OrderShipping(BaseModel):
     destination_ro = models.IntegerField()
     destination_address = models.TextField()
 
-    order_id_ro = models.CharField(
-        max_length=20,
-        null=True,
-        blank=True,
-    )
+    # order_id_ro = models.CharField(
+    #     max_length=20,
+    #     null=True,
+    #     blank=True,
+    # )
 
-    order_no_ro = models.CharField(
-        max_length=50,
-        null=True,
-        blank=True,
-    )
+    # order_no_ro = models.CharField(
+    #     max_length=50,
+    #     null=True,
+    #     blank=True,
+    # )
 
     # cod
     cod_value = models.PositiveIntegerField(

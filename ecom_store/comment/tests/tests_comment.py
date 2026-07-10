@@ -1,13 +1,9 @@
+from comment.models import Comment
 from django.core.management import call_command
 from django.test import TransactionTestCase
 from django.urls import reverse
 from freezegun import freeze_time
 from order.models import Order, OrderItem
-from product.models import Product
-from rest_framework.test import APIClient
-
-from comment.models import Comment
-
 from order.tests.helper_setup import (
     set_address,
     set_location_fields,
@@ -15,6 +11,8 @@ from order.tests.helper_setup import (
     set_store_shipping_option,
     set_user,
 )
+from product.models import Product
+from rest_framework.test import APIClient
 
 
 class CommentIntegrationTest(TransactionTestCase):
@@ -87,7 +85,7 @@ class CommentIntegrationTest(TransactionTestCase):
             email="other_get@gmail.com",
             phone_number="089384442950",
         )
-    
+
         Comment.objects.create(
             user=self.user, product=self.product, content="bagus", rating=5
         )
@@ -102,9 +100,9 @@ class CommentIntegrationTest(TransactionTestCase):
         Comment.objects.create(
             user=self.user, product=self.other_product, content="lain", rating=3
         )
-    
+
         response = self.client.get(self._comment_url(self.product.id))
-    
+
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]["content"], "bagus")
@@ -134,9 +132,7 @@ class CommentIntegrationTest(TransactionTestCase):
         )
 
         self.assertEqual(response.status_code, 403)
-        self.assertEqual(
-            response.data["detail"], "User belum pernah membeli product"
-        )
+        self.assertEqual(response.data["detail"], "User belum pernah membeli product")
 
     def test_post_returns_403_when_order_not_yet_delivered(self):
         """

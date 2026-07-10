@@ -1,10 +1,11 @@
 import warnings
 
 from django.conf import settings
+from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from phonenumber_field.modelfields import PhoneNumberField
-from django.contrib.auth.base_user import BaseUserManager
+
 
 class UserDeleteWarning(Warning):
     pass
@@ -24,7 +25,7 @@ class CustomUserQuerySet(models.QuerySet):
 class CustomUserManager(BaseUserManager):
     def get_queryset(self):
         return CustomUserQuerySet(self.model, using=self._db)
-        
+
     def create_user(self, email, password=None, **extra_fields):
         if not email:
             raise ValueError("Email is required")
@@ -51,6 +52,7 @@ class CustomUserManager(BaseUserManager):
 
         return user
 
+
 class CustomUser(AbstractUser):
     email = models.EmailField(unique=True)
     phone_number = PhoneNumberField(unique=True)
@@ -59,7 +61,7 @@ class CustomUser(AbstractUser):
     REQUIRED_FIELDS = []
 
     objects = CustomUserManager()
-    
+
     @property
     def clean_phone_number(self):
         if self.phone_number:

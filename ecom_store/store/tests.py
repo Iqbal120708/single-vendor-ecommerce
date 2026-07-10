@@ -1,3 +1,4 @@
+from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -11,7 +12,6 @@ from shipping_address.models import (
     SubDistrict,
 )
 from store.models import Store
-from decimal import Decimal
 
 User = get_user_model()
 

@@ -50,7 +50,7 @@ class OrderShippingSerializer(serializers.ModelSerializer):
             "additional_cost",
             "origin_address",
             "destination_address",
-            "order_no_ro",
+            # "order_no_ro",
             "cod_value",
             "tracking_number",
         ]

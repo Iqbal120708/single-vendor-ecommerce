@@ -1,3 +1,4 @@
+import json
 from unittest.mock import patch
 
 from allauth.account.models import EmailAddress
@@ -18,7 +19,6 @@ from shipping_address.models import (
     ShippingAddress,
     SubDistrict,
 )
-import json
 
 User = get_user_model()
 
@@ -76,7 +76,7 @@ class TestAddress(APITestCase):
                 "zip_code": "djfjfj",
                 "street_address": "nd",
                 "latitude": 8.5899,
-                'longitude': 116.1107
+                "longitude": 116.1107,
             },
         )
 
@@ -101,7 +101,7 @@ class TestAddress(APITestCase):
                 "zip_code": "12455",
                 "street_address": "nd",
                 "latitude": 8.5899,
-                'longitude': 116.1107
+                "longitude": 116.1107,
             },
         )
 
@@ -126,7 +126,7 @@ class TestAddress(APITestCase):
                 "zip_code": "12455",
                 "street_address": "nd",
                 "latitude": 8.5899,
-                'longitude': 116.1107
+                "longitude": 116.1107,
             },
         )
 
@@ -151,7 +151,7 @@ class TestAddress(APITestCase):
                 "zip_code": "12455",
                 "street_address": "nd",
                 "latitude": 8.5899,
-                'longitude': 116.1107
+                "longitude": 116.1107,
             },
         )
 
@@ -159,7 +159,7 @@ class TestAddress(APITestCase):
 
         response = res_post.content
         data = json.loads(response)
-        
+
         self.assertEqual(data["district_name"][0], "District not found.")
 
     @patch("accounts.signals.logger")
@@ -176,7 +176,7 @@ class TestAddress(APITestCase):
                 "zip_code": "12455",
                 "street_address": "nd",
                 "latitude": 8.5899,
-                'longitude': 116.1107
+                "longitude": 116.1107,
             },
         )
 
@@ -184,7 +184,7 @@ class TestAddress(APITestCase):
 
         response = res_post.content
         data = json.loads(response)
-        
+
         self.assertEqual(data["subdistrict_name"][0], "Subdistrict not found.")
 
     @patch("accounts.signals.logger")

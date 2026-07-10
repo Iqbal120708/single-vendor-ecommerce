@@ -50,7 +50,7 @@ class GetOrderByFilterIntegrationTest(TransactionTestCase):
             payment_status=payment_status,
             payment_method=Order.PaymentMethod.COD,
         )
-    
+
         if with_shipping:
             OrderShipping.objects.create(
                 order=order,
@@ -65,7 +65,7 @@ class GetOrderByFilterIntegrationTest(TransactionTestCase):
                 destination_ro=2,
                 destination_address="Cirebon",
             )
-    
+
         return OrderItem.objects.create(
             order=order,
             product=self.product,
@@ -209,7 +209,7 @@ class GetOrderByFilterIntegrationTest(TransactionTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 0)
-        
+
     def test_order_with_null_shipping_excluded(self):
         """
         Test: order item dengan order.shipping = None tidak boleh muncul,
@@ -221,7 +221,10 @@ class GetOrderByFilterIntegrationTest(TransactionTestCase):
 
         # order.shipping tidak di-set -> None
         self._create_order_item(
-            self.user, Order.Status.PENDING, Order.PaymentStatus.PENDING, with_shipping=False
+            self.user,
+            Order.Status.PENDING,
+            Order.PaymentStatus.PENDING,
+            with_shipping=False,
         )
 
         response = self.client.get(self.url, {"status": Order.Status.PENDING})

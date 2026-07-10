@@ -1,7 +1,7 @@
 from rest_framework import status
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.permissions import AllowAny
 
 from .models import Category, Product
 from .serializers import CategorySerializer, ProductSerializer
@@ -16,7 +16,7 @@ class CategoryList(APIView):
 
 class ProductList(APIView):
     permission_classes = [AllowAny]
-    
+
     def get(self, request):
         queryset = Product.objects.all().order_by("id")
         serializer = ProductSerializer(queryset, many=True)

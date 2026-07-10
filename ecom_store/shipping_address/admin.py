@@ -74,7 +74,7 @@ class ShippingAddressAdmin(ReadOnlyForStaffMixin):
         "district_name",
         "subdistrict_name",
         "latitude",
-        "longitude"
+        "longitude",
     ]
     search_fields = [
         "username",
