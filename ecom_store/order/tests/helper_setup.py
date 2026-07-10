@@ -70,10 +70,6 @@ def set_store(province, city, district):
         phone_number="081234567890",
     )
 
-    EmailAddress.objects.create(
-        user=superuser, email=superuser.email, verified=True, primary=True
-    )
-
     # 3. Membuat Shipping Address Kedua (untuk superuser)
     shipping_address_2 = ShippingAddress.objects.create(
         province=province,

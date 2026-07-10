@@ -3,7 +3,7 @@ import uuid
 from django.core.management import call_command
 from django.test import TransactionTestCase
 from django.urls import reverse
-from order.models import Order, OrderItem
+from order.models import Order, OrderItem, OrderShipping
 from product.models import Product
 from rest_framework.test import APIClient
 
@@ -44,13 +44,29 @@ class GetOrderDetailIntegrationTest(TransactionTestCase):
         if len(self.products) < 2:
             self.products = [self.products[0], self.products[0]]
 
-    def _create_order_with_items(self, user, item_count=1, order_status=Order.Status.PENDING):
+    def _create_order_with_items(self, user, item_count=1, order_status=Order.Status.PENDING, with_shipping=True):
         order = Order.objects.create(
             user=user,
             store=self.store,
             status=order_status,
             payment_status=Order.PaymentStatus.PAID,
         )
+        
+        if with_shipping:
+            OrderShipping.objects.create(
+                order=order,
+                shipping_name="JNE",
+                service_name="REG",
+                etd="2-3",
+                shipping_cost=10000,
+                shipping_cost_net=10000,
+                service_fee=1000,
+                origin_ro=1,
+                origin_address="Jakarta",
+                destination_ro=2,
+                destination_address="Cirebon",
+            )
+            
         items = []
         for i in range(item_count):
             product = self.products[i % len(self.products)]
@@ -225,3 +241,18 @@ class GetOrderDetailIntegrationTest(TransactionTestCase):
         self.assertEqual(response.status_code, 404)
         items[0].refresh_from_db()
         self.assertFalse(items[0].is_archived)
+        
+    def test_order_with_null_shipping_returns_404(self):
+        """
+        Test: order dengan shipping = None tidak boleh bisa diakses
+        lewat endpoint detail, sama seperti order yang fully archived.
+        """
+        self.client.force_authenticate(self.user)
+        
+        order, items = self._create_order_with_items(
+            self.user, item_count=1, with_shipping=False
+        )
+
+        response = self.client.get(self._detail_url(order.order_id))
+
+        self.assertEqual(response.status_code, 404)

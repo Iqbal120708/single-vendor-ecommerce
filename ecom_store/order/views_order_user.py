@@ -26,6 +26,7 @@ class GetOrderByFilter(APIView):
         queryset = (
             OrderItem.objects.select_related("order", "product")
             .filter(**filter_parameter)
+            .exclude(order__shipping__isnull=True)
             .order_by("-created_at")
         )
         serializer = OrderItemSerializer(queryset, many=True)
@@ -43,6 +44,7 @@ class GetOrderDetail(APIView):
         order_items = (
             OrderItem.objects.select_related("order", "product")
             .filter(**filter_parameter)
+            .exclude(order__shipping__isnull=True)
             .order_by("created_at")
         )
         if not order_items.exists():
