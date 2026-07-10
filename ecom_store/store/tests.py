@@ -1,6 +1,5 @@
 from unittest.mock import patch
 
-from allauth.account.models import EmailAddress
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from rest_framework.test import APITestCase
@@ -27,10 +26,6 @@ class StoreTest(APITestCase):
             email="admin@example.com",
             password="adminpassword113",
             phone_number="081134567890",
-        )
-
-        EmailAddress.objects.create(
-            user=self.superuser, email=self.superuser.email, verified=True, primary=True
         )
 
         # 2. Membuat Data Wilayah Baru (ro_id=1)
