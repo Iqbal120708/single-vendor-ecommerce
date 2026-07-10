@@ -1,7 +1,7 @@
 from django.core.management import call_command
 from django.test import TransactionTestCase
 from django.urls import reverse
-from order.models import Order, OrderItem
+from order.models import Order, OrderItem, OrderShipping
 from product.models import Product
 from rest_framework.test import APIClient
 
@@ -40,14 +40,32 @@ class GetOrderByFilterIntegrationTest(TransactionTestCase):
         self.product = Product.objects.first()
         self.url = reverse("order")
 
-    def _create_order_item(self, user, order_status, payment_status, is_archived=False):
+    def _create_order_item(
+        self, user, order_status, payment_status, is_archived=False, with_shipping=True
+    ):
         order = Order.objects.create(
             user=user,
             store=self.store,
             status=order_status,
             payment_status=payment_status,
-            payment_method=Order.PaymentMethod.COD
+            payment_method=Order.PaymentMethod.COD,
         )
+    
+        if with_shipping:
+            OrderShipping.objects.create(
+                order=order,
+                shipping_name="JNE",
+                service_name="REG",
+                etd="2-3",
+                shipping_cost=10000,
+                shipping_cost_net=10000,
+                service_fee=1000,
+                origin_ro=1,
+                origin_address="Jakarta",
+                destination_ro=2,
+                destination_address="Cirebon",
+            )
+    
         return OrderItem.objects.create(
             order=order,
             product=self.product,
@@ -188,6 +206,25 @@ class GetOrderByFilterIntegrationTest(TransactionTestCase):
         )
 
         response = self.client.get(self.url, {"status": Order.Status.SHIPPED})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 0)
+        
+    def test_order_with_null_shipping_excluded(self):
+        """
+        Test: order item dengan order.shipping = None tidak boleh muncul,
+        walau status dan payment_status-nya cocok dengan filter.
+        Ini membuktikan .exclude(order__shipping__isnull=True) benar-benar
+        jalan, bukan cuma lolos karena kebetulan filter lain menyaring duluan.
+        """
+        self.client.force_authenticate(self.user)
+
+        # order.shipping tidak di-set -> None
+        self._create_order_item(
+            self.user, Order.Status.PENDING, Order.PaymentStatus.PENDING, with_shipping=False
+        )
+
+        response = self.client.get(self.url, {"status": Order.Status.PENDING})
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 0)
