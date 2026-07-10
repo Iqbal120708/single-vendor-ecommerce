@@ -1,14 +1,27 @@
 # single-vendor-ecommerce
 
-Django/DRF e-commerce backend — row-level locking to prevent oversell, server-side price revalidation, idempotent payment webhook with stock reversal.
+Django/DRF e-commerce backend demonstrating concurrency-safe
+checkout and payment handling: row-level locking to prevent
+oversell, server-side price revalidation, and an idempotent
+Midtrans webhook with automatic stock reversal on failure/expiry.
+
+**Highlights:** race-condition-safe stock reservation
+(`select_for_update`) · idempotent webhook handling ·
+three-layer test suite (unit / integration / end-to-end) ·
+RajaOngkir shipping integration with tiered courier selection.
 
 ## Status
 
-This project is still under active development. The core transaction flow — checkout → shipping rates → transaction → payment webhook (non-COD) — is fully wired up and works for the normal case. Other modules (product, cart, comment, etc.) are functional but simpler by design.
+The core transaction flow — checkout, then shipping rates, then
+transaction, then payment webhook (non-COD) — is fully implemented
+and works end-to-end for the normal case, backed by unit and
+integration tests (with full three-layer coverage on the payment
+webhook). Other modules (product, cart, comment) are complete
+but intentionally simpler in scope.
 
 ## Worth a Look
 
-The sections below follow the actual transaction order: checkout → check shipping rates → transaction → payment webhook.
+The sections below follow the actual transaction order: checkout -> check shipping rates -> transaction -> payment webhook.
 
 ### Checkout with row-level locking
 
@@ -42,6 +55,10 @@ scheduled job yet that cleans up reservations from sessions that
 expired without ever reaching Midtrans, so `reserved_stock` can be
 left dangling and `available_stock` ends up smaller than it should
 be. This is a candidate for the next improvement (see Roadmap).
+
+For a deeper walkthrough of the reservation pattern and the
+`select_for_update()` locking logic, see the dev.to article:
+[Preventing Overselling with Stock Reservation and select_for_update() in Django](https://dev.to/iqbal120708/preventing-overselling-with-stock-reservation-and-selectforupdate-in-django-3jam)
 
 → `CheckoutService._validate_and_reserve_stock()` in
   `order/services/checkout.py`
@@ -118,9 +135,9 @@ server_key` is hashed with SHA-512 and compared against the
 is rejected (403) as a forged webhook, not a genuine one from
 Midtrans.
 
-The `payment_status` state machine blocks the `failed` → `paid`
+The `payment_status` state machine blocks the `failed` -> `paid`
 transition (treated as a stale notification, not a late payment),
-and handles the reversal case (`paid` → `failed`) that most webhook
+and handles the reversal case (`paid` -> `failed`) that most webhook
 tutorials skip — on this path, `reverse_stock()` is always called to
 restore stock that was already deducted, and `release_reservation()`
 is only added when the failure comes purely from `pending`
@@ -131,7 +148,7 @@ Idempotency is enforced via the `reduced_stock` flag at three
 different points: `reduce_stock()` (skips if already run),
 `reverse_stock()` (no-op if reduce never ran), and a guard at the
 view level ensuring `release_reservation()` only runs for genuinely
-new failures (`pending` → `failed`), not for reversals or duplicate
+new failures (`pending` -> `failed`), not for reversals or duplicate
 webhooks.
 
 Order and product rows are locked again with `select_for_update()`
@@ -392,4 +409,5 @@ deliberately left undone, not overlooked:
   the `drf-spectacular` config is prepared (commented out in
   `settings.py`) but not yet enabled and not yet in
   `requirements.txt`.
-
+- **Translate logger messages and code comments to English** —
+  currently written in Indonesian; not yet updated.
