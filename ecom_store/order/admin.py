@@ -48,7 +48,7 @@ class CheckoutSessionAdmin(ReadOnlyForStaffMixin):
     destination_address.short_description = "Destination"
 
     def show_json_cart_ids(self, obj):
-        data = json.dumps(obj.my_json_field, indent=2)
+        data = json.dumps(obj.cart_ids, indent=2)
         return mark_safe(
             f'<pre style="max-height: 100px; overflow: auto;">{data}</pre>'
         )
