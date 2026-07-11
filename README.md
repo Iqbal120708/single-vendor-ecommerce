@@ -411,3 +411,12 @@ deliberately left undone, not overlooked:
   `requirements.txt`.
 - **Translate logger messages and code comments to English** —
   currently written in Indonesian; not yet updated.
+- **Refund handling** — not yet implemented. This is different from
+  the *reversal* case discussed in the [webhook article](https://dev.to/iqbal120708/debugging-a-payment-webhook-how-i-caught-a-silent-failure-that-would-have-blocked-every-non-card-4dfi):
+  reversal is triggered automatically by Midtrans/the payment
+  provider shortly after settlement, while refund would be a
+  manually initiated flow (e.g. admin approves a return, or a
+  customer requests cancellation after delivery). Currently there's
+  no endpoint or logic for admin-initiated or customer-initiated
+  refunds — payment_status only moves through the states already
+  described in the article.
