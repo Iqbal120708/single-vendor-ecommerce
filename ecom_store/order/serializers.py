@@ -3,7 +3,8 @@ from decimal import Decimal
 from django.core.validators import MinValueValidator
 from rest_framework import serializers
 
-from .models import Order, OrderItem, OrderShipping
+from .models import Order, OrderItem, OrderShipping, RefundRequest
+from .tasks import send_refund_created_email
 
 
 class ShippingSerializer(serializers.Serializer):
@@ -68,7 +69,6 @@ class OrderSerializer(serializers.ModelSerializer):
             "payment_status",
             "payment_method",
             "delivered_at",
-            "canceled_at",
             "created_at",
             "grand_total",
             "net_income",
@@ -80,3 +80,75 @@ class OrderSerializer(serializers.ModelSerializer):
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
             field.read_only = True
+
+
+class RefundRequestCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RefundRequest
+        fields = [
+            "id", "order_item", "amount", "reason", "note",
+            "destination_type", "destination_provider", "destination_number",
+            "account_holder_name", "status", "requested_at",
+        ]
+        read_only_fields = ["id", "amount", "reason", "status", "requested_at"]
+
+    def validate_order_item(self, order_item):
+        request = self.context["request"]
+        if order_item.order.user_id != request.user.id:
+            raise serializers.ValidationError("Item ini bukan milik order Anda.")
+        if order_item.has_active_refund:
+            raise serializers.ValidationError("Sudah ada refund request aktif untuk item ini.")
+        return order_item
+
+    def validate(self, data):
+        provider = data.get("destination_provider")
+        destination_type = data.get("destination_type")
+
+        if destination_type == RefundRequest.DestinationType.BANK:
+            if provider not in RefundRequest.BANK_PROVIDERS:
+                raise serializers.ValidationError({"destination_provider": "Pilih bank yang valid."})
+        elif destination_type == RefundRequest.DestinationType.EWALLET:
+            if provider not in RefundRequest.EWALLET_PROVIDERS:
+                raise serializers.ValidationError({"destination_provider": "Pilih e-wallet yang valid."})
+
+        order = data["order_item"].order
+
+        if not hasattr(order, "shipping"):
+            raise serializers.ValidationError(
+                "Order belum menyelesaikan proses checkout -- refund tidak dapat diajukan."
+            )
+        
+        return data
+
+    def create(self, validated_data):
+        order_item = validated_data["order_item"]
+        order_status = order_item.order.status
+
+        if order_status in [order_item.order.Status.PENDING, order_item.order.Status.PROCESSING]:
+            reason = RefundRequest.Reason.CUSTOMER_CANCEL
+        elif order_status in [order_item.order.Status.SHIPPED, order_item.order.Status.DELIVERED]:
+            reason = RefundRequest.Reason.RETURN
+        else:
+            raise serializers.ValidationError(
+                f"Order dengan status {order_status} tidak bisa diajukan refund."
+            )
+
+        validated_data["reason"] = reason
+        validated_data["amount"] = order_item.subtotal
+        refund_request = super().create(validated_data)
+
+        send_refund_created_email.delay(refund_request.id)
+
+        return refund_request
+
+
+class RefundRequestDetailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RefundRequest
+        fields = [
+            "id", "order_item", "amount", "reason", "note", "status",
+            "destination_type", "destination_provider", "destination_number",
+            "account_holder_name",
+            "requested_at", "approved_at", "completed_at",
+        ]
+        read_only_fields = fields

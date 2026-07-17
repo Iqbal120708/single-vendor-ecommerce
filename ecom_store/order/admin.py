@@ -4,8 +4,8 @@ from config.admin import ReadOnlyForStaffMixin
 from django.contrib import admin
 from django.utils.safestring import mark_safe
 
-from .models import CheckoutSession, Order, OrderItem, OrderShipping, ShippingInsurance
-
+from .models import CheckoutSession, Order, OrderItem, OrderShipping, ShippingInsurance, RefundRequest
+from .services.refund import RefundService
 
 # Register your models here.
 @admin.register(ShippingInsurance)
@@ -125,7 +125,6 @@ class OrderAdmin(ReadOnlyForStaffMixin):
         "net_income",
         "actual_net_income",
         "delivered_at",
-        "canceled_at",
         "created_at",
         "updated_at",
     ]
@@ -225,3 +224,43 @@ class OrderShippingAdmin(ReadOnlyForStaffMixin):
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         return qs.select_related("order", "order__user", "order__store")
+
+
+@admin.register(RefundRequest)
+class RefundRequestAdmin(admin.ModelAdmin):
+    list_display = ["id", "order_item", "amount", "reason", "status", "requested_at"]
+    list_filter = ["status", "reason"]
+    actions = ["approve_selected", "reject_selected", "complete_selected"]
+    
+    def has_add_permission(self, request):
+        return False
+        
+    def get_readonly_fields(self, request, obj=None):
+        base_readonly = ["requested_at", "approved_at", "completed_at"]
+        if obj and obj.status == RefundRequest.Status.COMPLETED:
+            return base_readonly + ["reason"]
+        return base_readonly
+
+    def approve_selected(self, request, queryset):
+        for refund_request in queryset.filter(status=RefundRequest.Status.REQUESTED):
+            try:
+                RefundService(refund_request).approve()
+            except Exception as e:
+                self.message_user(request, f"Gagal approve {refund_request}: {e}", level="error")
+    approve_selected.short_description = "Approve refund request terpilih"
+
+    def reject_selected(self, request, queryset):
+        for refund_request in queryset.filter(status=RefundRequest.Status.REQUESTED):
+            try:
+                RefundService(refund_request).reject()
+            except Exception as e:
+                self.message_user(request, f"Gagal reject {refund_request}: {e}", level="error")
+    reject_selected.short_description = "Reject refund request terpilih"
+
+    def complete_selected(self, request, queryset):
+        for refund_request in queryset.filter(status=RefundRequest.Status.APPROVED):
+            try:
+                RefundService(refund_request).complete()
+            except Exception as e:
+                self.message_user(request, f"Gagal complete {refund_request}: {e}", level="error")
+    complete_selected.short_description = "Complete refund request terpilih (restore stock)"

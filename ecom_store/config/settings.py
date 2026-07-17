@@ -294,3 +294,16 @@ MIDTRANS_SERVER_KEY = os.environ.get("MIDTRANS_SERVER_KEY")
 MIDTRANS_CLIENT_KEY = os.environ.get("MIDTRANS_CLIENT_KEY")
 MIDTRANS_IS_PRODUCTION = os.environ.get("MIDTRANS_IS_PRODUCTION") == "True"
 # MIDTRANS_FINISH_URL = "http://127.0.0.1:5000/payment/finish"
+
+DEFAULT_FROM_EMAIL = os.environ.get("EMAIL_HOST_USER")
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD")
+
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+
+CELERY_BROKER_URL = REDIS_URL
+CELERY_RESULT_BACKEND = REDIS_URL

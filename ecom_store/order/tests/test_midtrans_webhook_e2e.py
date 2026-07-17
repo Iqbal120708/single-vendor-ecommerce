@@ -7,9 +7,10 @@ from django.conf import settings
 from django.test import TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
-from order.models import Order, OrderItem
+from order.models import Order, OrderItem, RefundRequest
 from product.models import Category, Product
 from rest_framework.test import APIClient
+from order.services.refund import RefundService
 
 from .helper_setup import (
     set_address,
@@ -585,3 +586,213 @@ class MidtransWebhookEndToEndTest(TransactionTestCase):
         self.assertEqual(response.status_code, 500)
         order.refresh_from_db()
         self.assertEqual(order.payment_status, "pending")  # tidak berubah sama sekali
+
+    @patch("order.services.refund.send_refund_status_email")
+    def test_reverse_stock_excludes_items_with_completed_refund(self, mock_email):
+        """
+        Test: order 2 item, salah satu sudah punya RefundRequest COMPLETED
+        (di-refund duluan sebelum reversal datang -- skenario "admin gercep").
+        Assert: item yang sudah direfund TIDAK ikut direstore stocknya lagi,
+        item lain tetap direstore normal.
+        """
+        
+        order = self._make_order(payment_status="paid", reduced_stock=True)
+        # Simulasikan stok yang sudah dikurangi sebelumnya (reduce_stock
+        # sudah jalan duluan, artinya reserved_stock sudah dilepas jadi 0)
+        self.product_a.stock = 8
+        self.product_a.reserved_stock = 0
+        self.product_a.save(update_fields=["stock", "reserved_stock"])
+        self.product_b.stock = 7
+        self.product_b.reserved_stock = 0
+        self.product_b.save(update_fields=["stock", "reserved_stock"])
+        
+        item_a = order.items.get(product=self.product_a)
+        item_b = order.items.get(product=self.product_b)
+        
+        refund = RefundRequest.objects.create(
+            order_item=item_a,
+            amount=item_a.subtotal,
+            reason=RefundRequest.Reason.RETURN,
+            status=RefundRequest.Status.APPROVED,
+            destination_type=RefundRequest.DestinationType.BANK,
+            destination_provider=RefundRequest.Provider.BCA,
+            destination_number="1234567890",
+            account_holder_name="Customer Satu",
+        )
+        RefundService(refund).complete()
+        
+        self.product_a.refresh_from_db()
+        self.product_b.refresh_from_db()
+        
+        self.assertEqual(self.product_a.stock, 10) # added 2 stock (refund effect)
+        
+        body = self._signed_payload(order.order_id, "deny")
+        response = self._post(body)
+        
+        stock_a_before = self.product_a.stock
+        stock_b_before = self.product_b.stock
+
+        self.product_a.refresh_from_db()
+        self.product_b.refresh_from_db()
+
+        self.assertEqual(self.product_a.stock, stock_a_before)  # tidak ikut direstore lagi
+        self.assertEqual(self.product_b.stock, stock_b_before + item_b.qty)  # tetap direstore
+        
+        # check fix number
+        self.assertEqual(stock_a_before, 10)
+        self.assertEqual(stock_b_before, 7)
+        
+    @patch("order.services.refund.send_refund_status_email")
+    def test_release_reservation_excludes_items_with_completed_refund(self, mock_email):
+        """
+        Test: order 2 item, salah satu sudah punya RefundRequest COMPLETED
+        (customer refund duluan sebelum webhook failed datang).
+        Assert: reserved_stock item yang sudah direfund TIDAK berkurang lagi,
+        item lain tetap diproses normal.
+        """
+        
+        order = self._make_order(payment_status="pending")
+        self._reserve_stock_for_order(order)
+        
+        item_a = order.items.get(product=self.product_a)
+        item_b = order.items.get(product=self.product_b)
+
+        refund = RefundRequest.objects.create(
+            order_item=item_a,
+            amount=item_a.subtotal,
+            reason=RefundRequest.Reason.CUSTOMER_CANCEL,
+            status=RefundRequest.Status.APPROVED,
+            destination_type=RefundRequest.DestinationType.BANK,
+            destination_provider=RefundRequest.Provider.BCA,
+            destination_number="1234567890",
+            account_holder_name="Customer Satu",
+        )
+        RefundService(refund).complete()
+        
+        self.product_a.refresh_from_db()
+        self.product_b.refresh_from_db()
+        
+        self.assertEqual(self.product_a.reserved_stock, 0) # refund effect
+
+        reserved_stock_a_before = self.product_a.reserved_stock
+        reserved_stock_b_before = self.product_b.reserved_stock
+        
+        body = self._signed_payload(order.order_id, "deny")
+        response = self._post(body)
+        
+        self.product_a.refresh_from_db()
+        self.product_b.refresh_from_db()
+
+        self.assertEqual(self.product_a.reserved_stock, reserved_stock_a_before)  # tidak ikut di release reservation
+        self.assertEqual(self.product_b.reserved_stock, reserved_stock_b_before - item_b.qty)  # tetap di release reservation
+        
+        # check fix number
+        self.assertEqual(reserved_stock_a_before, 0)
+        self.assertEqual(reserved_stock_b_before, 3)
+        
+    @patch("order.services.refund.send_refund_status_email")
+    def test_reverse_stock_noop_when_all_items_already_refunded(self, mock_email):
+        """
+        Test: order sudah paid+reduced_stock True, SEMUA item sudah di-refund
+        (COMPLETED) sebelum webhook reversal datang -- get_unrefunded_items()
+        return queryset kosong, restore_product_stock() tidak punya apa pun
+        untuk diproses.
+        Assert: reverse_stock() tidak error, product.stock kedua produk tidak
+        berubah (karena sudah direstore duluan lewat refund), order.reduced_stock
+        tetap di-set False setelah reversal (flag order-level tidak lagi relevan
+        begitu semua item sudah selesai direfund).
+        """
+        order = self._make_order(payment_status="paid", reduced_stock=True)
+        # Simulasikan stok yang sudah dikurangi sebelumnya (reduce_stock
+        # sudah jalan duluan, artinya reserved_stock sudah dilepas jadi 0)
+        self.product_a.stock = 8
+        self.product_a.reserved_stock = 0
+        self.product_a.save(update_fields=["stock", "reserved_stock"])
+        self.product_b.stock = 7
+        self.product_b.reserved_stock = 0
+        self.product_b.save(update_fields=["stock", "reserved_stock"])
+        
+        item_a = order.items.get(product=self.product_a)
+        item_b = order.items.get(product=self.product_b)
+    
+        for item in [item_a, item_b]:
+            refund = RefundRequest.objects.create(
+                order_item=item,
+                amount=item.subtotal,
+                reason=RefundRequest.Reason.RETURN,
+                status=RefundRequest.Status.APPROVED,
+                destination_type=RefundRequest.DestinationType.BANK,
+                destination_provider=RefundRequest.Provider.BCA,
+                destination_number="1234567890",
+                account_holder_name="Customer Satu",
+            )
+            RefundService(refund).complete()
+    
+        self.product_a.refresh_from_db()
+        self.product_b.refresh_from_db()
+    
+        stock_a_before = self.product_a.stock
+        stock_b_before = self.product_b.stock
+    
+        body = self._signed_payload(order.order_id, "deny")
+        response = self._post(body)
+    
+        order.refresh_from_db()
+        self.product_a.refresh_from_db()
+        self.product_b.refresh_from_db()
+    
+        self.assertEqual(self.product_a.stock, stock_a_before)
+        self.assertEqual(self.product_b.stock, stock_b_before)
+        self.assertFalse(order.reduced_stock)
+            
+        # check fix number - semua sudah direfund
+        self.assertEqual(stock_a_before, 10)
+        self.assertEqual(stock_b_before, 10)
+        
+    @patch("order.services.refund.send_refund_status_email")
+    def test_release_reservation_noop_when_all_items_already_refunded(self, mock_email):
+        """
+        Test: order pending, SEMUA item sudah di-refund (COMPLETED) sebelum
+        webhook deny datang -- get_unrefunded_items() return queryset kosong.
+        Assert: release_reservation() tidak error, reserved_stock kedua produk
+        tidak berubah sama sekali (karena semua sudah direstore lewat refund).
+        """
+        order = self._make_order(payment_status="pending")
+        self._reserve_stock_for_order(order)
+    
+        item_a = order.items.get(product=self.product_a)
+        item_b = order.items.get(product=self.product_b)
+    
+        for item in [item_a, item_b]:
+            refund = RefundRequest.objects.create(
+                order_item=item,
+                amount=item.subtotal,
+                reason=RefundRequest.Reason.CUSTOMER_CANCEL,
+                status=RefundRequest.Status.APPROVED,
+                destination_type=RefundRequest.DestinationType.BANK,
+                destination_provider=RefundRequest.Provider.BCA,
+                destination_number="1234567890",
+                account_holder_name="Customer Satu",
+            )
+            RefundService(refund).complete()
+    
+        self.product_a.refresh_from_db()
+        self.product_b.refresh_from_db()
+    
+        reserved_stock_a_before = self.product_a.reserved_stock
+        reserved_stock_b_before = self.product_b.reserved_stock
+    
+        body = self._signed_payload(order.order_id, "deny")
+        response = self._post(body)
+    
+        self.product_a.refresh_from_db()
+        self.product_b.refresh_from_db()
+    
+        self.assertEqual(self.product_a.reserved_stock, reserved_stock_a_before)
+        self.assertEqual(self.product_b.reserved_stock, reserved_stock_b_before)
+    
+        # check fix number -- semua sudah direfund, reserved_stock harus 0
+        self.assertEqual(reserved_stock_a_before, 0)
+        self.assertEqual(reserved_stock_b_before, 0)
+    
+    

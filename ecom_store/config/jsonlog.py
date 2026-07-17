@@ -76,4 +76,16 @@ class JSONFormatter(logging.Formatter):
             if hasattr(record, "checkout_id"):
                 log_record["checkout_id"] = str(record.checkout_id)
 
+        elif event_type == "refund":
+            if hasattr(record, "order_id"):
+                log_record["order_id"] = record.order_id
+            if hasattr(record, "refund_request_id"):
+                log_record["refund_request_id"] = record.refund_request_id
+            if hasattr(record, "reason"):
+                log_record["reason"] = record.reason
+            if hasattr(record, "payment_status"):
+                log_record["payment_status"] = record.payment_status
+            if hasattr(record, "reduced_stock"):
+                log_record["reduced_stock"] = record.reduced_stock
+                
         return json.dumps(log_record, cls=DjangoJSONEncoder)

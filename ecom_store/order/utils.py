@@ -13,7 +13,7 @@ from rest_framework.exceptions import APIException, NotFound
 # from shipping_address.utils import format_address
 from store.models import Store, StoreShippingOption
 
-from .models import CheckoutSession, Order, OrderItem
+from .models import CheckoutSession, Order, OrderItem, RefundRequest
 
 
 class RajaOngkirException(APIException):
@@ -314,6 +314,9 @@ def reduce_product_stock(order_items):
 
 
 def restore_product_stock(order_items):
+    if not order_items:
+        return
+    
     product_ids = order_items.values_list("product_id", flat=True)
 
     products = (
@@ -482,3 +485,10 @@ def build_midtrans_payload(order, checkout, item_details, gross_amount):
             "phone": str(checkout.user.phone_number),
         },
     }
+
+def get_unrefunded_items(order):
+    refunded_item_ids = RefundRequest.objects.filter(
+        order_item__order=order,
+        status=RefundRequest.Status.COMPLETED,
+    ).values_list("order_item_id", flat=True)
+    return order.items.select_for_update().exclude(id__in=refunded_item_ids)

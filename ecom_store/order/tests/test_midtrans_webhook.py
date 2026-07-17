@@ -342,24 +342,26 @@ class ReverseStockTests(TestCase):
 
     @patch("order.services.midtrans.logger")
     @patch("order.services.midtrans.restore_product_stock")
+    @patch("order.services.midtrans.get_unrefunded_items")
     def test_reverse_stock_restores_when_reduced_and_not_shipped(
-        self, mock_restore, mock_logger
+        self, mock_get_unrefunded, mock_restore, mock_logger
     ):
         """
         Test: order.reduced_stock True, order.status masih PENDING/PROCESSING
         (belum dikirim) -- kasus reversal normal (paid -> failed).
-        Assert: restore_product_stock terpanggil dengan items order,
-        reduced_stock di-set False dan disimpan.
+        Assert: restore_product_stock terpanggil dengan hasil get_unrefunded_items
+        (bukan order.items.all() langsung), reduced_stock di-set False dan disimpan.
         """
         webhook = WebhookMidtrans()
         webhook.order = MagicMock()
         webhook.order.reduced_stock = True
         webhook.order.status = "processing"
         items = MagicMock()
-        webhook.order.items.all.return_value = items
+        mock_get_unrefunded.return_value = items
 
         webhook.reverse_stock()
 
+        mock_get_unrefunded.assert_called_once_with(webhook.order)
         mock_restore.assert_called_once_with(items)
         self.assertFalse(webhook.order.reduced_stock)
         webhook.order.save.assert_called_once_with(update_fields=["reduced_stock"])
@@ -410,7 +412,10 @@ class ReverseStockTests(TestCase):
 
     @patch("order.services.midtrans.logger_error")
     @patch("order.services.midtrans.restore_product_stock")
-    def test_reverse_stock_propagates_exception(self, mock_restore, mock_logger_error):
+    @patch("order.services.midtrans.get_unrefunded_items")
+    def test_reverse_stock_propagates_exception(
+        self, mock_get_unrefunded, mock_restore, mock_logger_error
+    ):
         """
         Test: restore_product_stock raise exception (misal koneksi DB terputus
         saat proses restore).
@@ -422,12 +427,39 @@ class ReverseStockTests(TestCase):
         webhook.order = MagicMock()
         webhook.order.reduced_stock = True
         webhook.order.status = "processing"
+        mock_get_unrefunded.return_value = MagicMock()
         mock_restore.side_effect = Exception("DB connection lost")
 
         with self.assertRaises(Exception):
             webhook.reverse_stock()
 
         mock_logger_error.exception.assert_called_once()
+        
+    @patch("order.services.midtrans.logger")
+    @patch("order.services.midtrans.Product")
+    @patch("order.services.midtrans.get_unrefunded_items")
+    def test_release_reservation_noop_when_all_items_already_refunded(
+        self, mock_get_unrefunded, mock_product_model, mock_logger
+    ):
+        """
+        Test: order.reduced_stock True, tapi get_unrefunded_items() return
+        queryset kosong (semua item sudah RefundRequest COMPLETED).
+        Assert: tidak lanjut ke Product.objects.select_for_update() sama sekali,
+        tidak ada save() yang terpanggil.
+        """
+        webhook = WebhookMidtrans()
+        webhook.order = MagicMock()
+        webhook.order.reduced_stock = True
+        
+        mock_qs = MagicMock()
+        mock_qs.values_list.return_value = []
+        mock_qs.__bool__.return_value = bool([])
+        mock_get_unrefunded.return_value = mock_qs
+
+        webhook.reverse_stock()
+
+        mock_product_model.objects.select_for_update.assert_not_called()
+        mock_logger.warning.assert_called_once()
 
 
 # =====================================================================
@@ -437,93 +469,111 @@ class ReleaseReservationTests(TestCase):
     """
     release_reservation() sekarang TANPA guard internal -- pemicu (old_status
     not in ("paid", "failed")) dijamin benar oleh view, bukan oleh method ini.
-    Jadi unit test ini murni menguji: method mengurangi reserved_stock tiap
-    item sesuai qty dan memanggil save() dengan update_fields yang benar --
-    TIDAK menguji kondisi kapan method ini seharusnya dipanggil (itu bagian
-    dari test integration/e2e view, bukan tanggung jawab method ini lagi).
+    order_items yang di-mock harus berperilaku seperti queryset asli (support
+    __bool__, values_list(), __iter__) karena kode sekarang memakai
+    order_items.values_list("product_id", flat=True) dan Product.objects.filter(id__in=...).
     """
 
-    def test_release_reservation_decrements_each_item(self):
+    def _mock_order_items(self, items):
+        """Helper: bikin mock queryset-like yang support values_list/iter/bool."""
+        mock_qs = MagicMock()
+        mock_qs.values_list.return_value = [item.product_id for item in items]
+        mock_qs.__iter__.return_value = iter(items)
+        mock_qs.__bool__.return_value = bool(items)
+        return mock_qs
+
+    @patch("order.services.midtrans.Product")
+    @patch("order.services.midtrans.get_unrefunded_items")
+    def test_release_reservation_decrements_each_item(
+        self, mock_get_unrefunded, mock_product_model
+    ):
         """
-        Test: order dengan beberapa item, tiap item py product dengan
+        Test: order dengan beberapa item, tiap item punya product dengan
         reserved_stock tertentu.
         Assert: reserved_stock tiap product berkurang sesuai qty item
         masing-masing, save() terpanggil dengan update_fields=["reserved_stock"]
-        untuk tiap product.
+        untuk tiap product, get_unrefunded_items dipanggil dengan order yang benar.
         """
         webhook = WebhookMidtrans()
         webhook.order = MagicMock()
-
-        item_a = MagicMock()
-        item_a.qty = 2
-        product_a = MagicMock()
-        product_a.reserved_stock = 5
-        item_a.product = product_a
-
-        item_b = MagicMock()
-        item_b.qty = 3
-        product_b = MagicMock()
-        product_b.reserved_stock = 4
-        item_b.product = product_b
-
-        webhook.order.items.all.return_value = [item_a, item_b]
         webhook.order.reduced_stock = False
+
+        item_a = MagicMock(product_id=1, qty=2)
+        item_b = MagicMock(product_id=2, qty=3)
+        mock_get_unrefunded.return_value = self._mock_order_items([item_a, item_b])
+
+        product_a = MagicMock(id=1, reserved_stock=5)
+        product_b = MagicMock(id=2, reserved_stock=4)
+        mock_qs = mock_product_model.objects.select_for_update.return_value
+        mock_qs.filter.return_value.order_by.return_value = [product_a, product_b]
 
         webhook.release_reservation()
 
+        mock_get_unrefunded.assert_called_once_with(webhook.order)
         self.assertEqual(product_a.reserved_stock, 3)  # 5 - 2
         self.assertEqual(product_b.reserved_stock, 1)  # 4 - 3
         product_a.save.assert_called_once_with(update_fields=["reserved_stock"])
         product_b.save.assert_called_once_with(update_fields=["reserved_stock"])
 
-    def test_release_reservation_does_not_touch_stock_field(self):
+    @patch("order.services.midtrans.Product")
+    @patch("order.services.midtrans.get_unrefunded_items")
+    def test_release_reservation_does_not_touch_stock_field(
+        self, mock_get_unrefunded, mock_product_model
+    ):
         """
         Test: release_reservation() hanya boleh menyentuh reserved_stock,
-        TIDAK boleh mengubah field stock (itu tanggung jawab reduce_stock/
-        reverse_stock, bukan method ini -- karena stock fisik belum pernah
-        dikurangi untuk kasus pending->failed).
+        TIDAK boleh mengubah field stock.
         Assert: product.stock tidak berubah dari nilai awal.
         """
         webhook = WebhookMidtrans()
         webhook.order = MagicMock()
-
-        item = MagicMock()
-        item.qty = 2
-        product = MagicMock()
-        product.reserved_stock = 5
-        product.stock = 10
-        item.product = product
-
-        webhook.order.items.all.return_value = [item]
         webhook.order.reduced_stock = False
+
+        item = MagicMock(product_id=1, qty=2)
+        mock_get_unrefunded.return_value = self._mock_order_items([item])
+
+        product = MagicMock(id=1, reserved_stock=5, stock=10)
+        mock_qs = mock_product_model.objects.select_for_update.return_value
+        mock_qs.filter.return_value.order_by.return_value = [product]
 
         webhook.release_reservation()
 
-        self.assertEqual(product.stock, 10)  # tidak berubah
-        self.assertEqual(product.reserved_stock, 3)  # 5 - 2
+        self.assertEqual(product.stock, 10)
+        self.assertEqual(product.reserved_stock, 3)
 
-    def test_release_reservation_does_not_update_reserved_stock(self):
+    def test_release_reservation_does_not_update_reserved_stock_when_reduced_stock_true(self):
         """
-        Test: field order.reduced_stock=True membuat release_reservation() tidak mengubah reserved_stock dan langsung return
-        Assert: product.reserved_stock tidak berubah dari nilai awal.
+        Test: order.reduced_stock True -- method harus langsung return sebelum
+        memanggil get_unrefunded_items() sama sekali.
+        Assert: reserved_stock tidak berubah, get_unrefunded_items tidak terpanggil.
         """
         webhook = WebhookMidtrans()
         webhook.order = MagicMock()
-
-        item = MagicMock()
-        item.qty = 2
-        product = MagicMock()
-        product.reserved_stock = 5
-        product.stock = 10
-        item.product = product
-
-        webhook.order.items.all.return_value = [item]
         webhook.order.reduced_stock = True
+
+        with patch("order.services.midtrans.get_unrefunded_items") as mock_get_unrefunded:
+            webhook.release_reservation()
+            mock_get_unrefunded.assert_not_called()
+
+    @patch("order.services.midtrans.Product")
+    @patch("order.services.midtrans.get_unrefunded_items")
+    def test_release_reservation_noop_when_all_items_already_refunded(
+        self, mock_get_unrefunded, mock_product_model
+    ):
+        """
+        Test: order.reduced_stock False, tapi get_unrefunded_items() return
+        queryset kosong (semua item sudah RefundRequest COMPLETED).
+        Assert: tidak lanjut ke Product.objects.select_for_update() sama sekali,
+        tidak ada save() yang terpanggil.
+        """
+        webhook = WebhookMidtrans()
+        webhook.order = MagicMock()
+        webhook.order.reduced_stock = False
+        mock_get_unrefunded.return_value = self._mock_order_items([])
 
         webhook.release_reservation()
 
-        self.assertEqual(product.reserved_stock, 5)  # tidak berubah
-
+        mock_product_model.objects.select_for_update.assert_not_called()
 
 # =====================================================================
 # validate_signature

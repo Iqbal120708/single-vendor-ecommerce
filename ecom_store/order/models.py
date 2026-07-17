@@ -31,14 +31,14 @@ class Order(BaseModel):
         PROCESSING = "processing", "Processing"
         SHIPPED = "shipped", "Shipped"
         DELIVERED = "delivered", "Delivered"
-        CANCELED = "canceled", "Canceled"
+        #CANCELED = "canceled", "Canceled"
 
     class PaymentStatus(models.TextChoices):
         PENDING = "pending", "Pending"
         UNPAID = "unpaid", "Unpaid"
         PAID = "paid", "Paid"
         FAILED = "failed", "Failed"
-        REFUNDED = "refunded", "Refunded"
+        #REFUNDED = "refunded", "Refunded"
 
     class PaymentMethod(models.TextChoices):
         BANK_TRANSFER = "BANK TRANSFER", "Bank Transfer"
@@ -71,7 +71,6 @@ class Order(BaseModel):
     )
 
     delivered_at = models.DateTimeField(null=True, blank=True)
-    canceled_at = models.DateTimeField(null=True, blank=True)
 
     payment_method = models.CharField(
         max_length=20, choices=PaymentMethod.choices, null=True, blank=True
@@ -108,7 +107,11 @@ class Order(BaseModel):
         ),
     )
 
-    reduced_stock = models.BooleanField(default=False, editable=False)
+    reduced_stock = models.BooleanField(
+        default=False,
+        editable=False,
+        help_text="True setelah reduce_stock() webhook sukses sekali. Tidak berubah saat refund/cancel per item — cek RefundRequest untuk status stock item.",
+    )
 
     def clean(self):
         super().clean()
@@ -121,6 +124,26 @@ class Order(BaseModel):
             raise ValidationError(
                 "Selain COD, status order harus 'pending' jika pembayaran masih unpaid."
             )
+            
+    @property
+    def refund_status(self):
+        items = list(self.items.all())
+        refunded_items = [i for i in items if i.is_refunded]
+        if not refunded_items:
+            return None
+        if len(refunded_items) == len(items):
+            return "refunded"
+        return "partially_refunded"
+
+    @property
+    def is_fully_canceled(self):
+        return all(
+            item.refund_requests.filter(
+                status=RefundRequest.Status.COMPLETED,
+                reason=RefundRequest.Reason.CUSTOMER_CANCEL,
+            ).exists()
+            for item in self.items.all()
+        )
 
     def save(self, *args, **kwargs):
         self.full_clean()
@@ -218,6 +241,18 @@ class OrderItem(BaseModel):
     is_archived = models.BooleanField(default=False)
 
     @property
+    def is_refunded(self):
+        return self.refund_requests.filter(
+            status=RefundRequest.Status.COMPLETED
+        ).exists()
+
+    @property
+    def has_active_refund(self):
+        return self.refund_requests.filter(
+            status__in=[RefundRequest.Status.REQUESTED, RefundRequest.Status.APPROVED]
+        ).exists()
+        
+    @property
     def subtotal(self):
         return self.qty * self.product_price
 
@@ -243,3 +278,88 @@ class CheckoutSession(BaseModel):
 
     def __str__(self):
         return f"{self.user} - {self.id}"
+
+class RefundRequest(BaseModel):
+    class Status(models.TextChoices):
+        REQUESTED = "requested", "Requested"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+        COMPLETED = "completed", "Completed"
+
+    class Reason(models.TextChoices):
+        CUSTOMER_CANCEL = "customer_cancel", "Dibatalkan Customer"
+        OUT_OF_STOCK = "out_of_stock", "Stok Habis"
+        RETURN = "return", "Retur Pasca-Kirim"
+        OTHER = "other", "Lainnya"
+
+    class DestinationType(models.TextChoices):
+        BANK = "bank", "Transfer Bank"
+        EWALLET = "ewallet", "E-Wallet"
+
+    class Provider(models.TextChoices):
+        BCA = "bca", "BCA"
+        MANDIRI = "mandiri", "Mandiri"
+        BNI = "bni", "BNI"
+        BRI = "bri", "BRI"
+        PERMATA = "permata", "Permata"
+        CIMB = "cimb", "CIMB Niaga"
+        GOPAY = "gopay", "GoPay"
+        SHOPEEPAY = "shopeepay", "ShopeePay"
+        DANA = "dana", "DANA"
+        OVO = "ovo", "OVO"
+
+    BANK_PROVIDERS = {"bca", "mandiri", "bni", "bri", "permata", "cimb"}
+    EWALLET_PROVIDERS = {"gopay", "shopeepay", "dana", "ovo"}
+
+    order_item = models.ForeignKey(
+        OrderItem,
+        on_delete=models.PROTECT,
+        related_name="refund_requests",
+    )
+
+    amount = models.PositiveIntegerField(
+        editable=False,
+        help_text="Diambil otomatis dari subtotal order_item, tidak bisa diisi customer.",
+    )
+
+    reason = models.CharField(
+        max_length=30,
+        choices=Reason.choices,
+        help_text=(
+            "Otomatis diisi CUSTOMER_CANCEL/RETURN saat customer mengajukan. "
+            "Admin bisa ubah manual (mis. jadi OUT_OF_STOCK) sebelum status COMPLETED."
+        ),
+    )
+
+    note = models.TextField(
+        blank=True,
+        help_text="Catatan tambahan dari customer saat mengajukan refund.",
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.REQUESTED,
+    )
+
+    destination_type = models.CharField(max_length=10, choices=DestinationType.choices)
+    destination_provider = models.CharField(max_length=20, choices=Provider.choices)
+    destination_number = models.CharField(
+        max_length=50,
+        help_text="Nomor rekening atau nomor HP e-wallet tujuan refund.",
+    )
+    account_holder_name = models.CharField(
+        max_length=150,
+        help_text="Nama pemilik rekening/e-wallet, untuk verifikasi admin sebelum transfer manual.",
+    )
+
+    requested_at = models.DateTimeField(auto_now_add=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def order(self):
+        return self.order_item.order
+
+    def __str__(self):
+        return f"Refund {self.order_item} - {self.status}"

@@ -18,7 +18,7 @@ from rest_framework.views import APIView
 from store.models import Store
 
 from .models import CheckoutSession, Order
-from .serializers import ShippingSerializer
+from .serializers import ShippingSerializer, RefundRequestCreateSerializer, RefundRequestDetailSerializer
 from .services.checkout import CheckoutService
 from .services.midtrans import (
     InvalidMidtransPayload,
@@ -291,3 +291,13 @@ class MidtransWebhookView(APIView):
             f"Transaksi Midtrans untuk order id {payload['order_id']} berhasil di proses"
         )
         return Response({"detail": "OK"}, status=200)
+
+class RefundRequestCreateView(APIView):
+    def post(self, request):
+        serializer = RefundRequestCreateSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        refund_request = serializer.save()
+        return Response(
+            RefundRequestDetailSerializer(refund_request).data,
+            status=status.HTTP_201_CREATED,
+        )

@@ -4,11 +4,13 @@ import logging
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from order.models import Order
+from order.models import Order, RefundRequest
+from product.models import Product
 from order.utils import (
     fetch_order_rajaongkir,
     reduce_product_stock,
     restore_product_stock,
+    get_unrefunded_items
 )
 
 logger = logging.getLogger("order")
@@ -166,7 +168,8 @@ class WebhookMidtrans:
             return
 
         try:
-            restore_product_stock(self.order.items.all())
+            items_to_restore = get_unrefunded_items(self.order)
+            restore_product_stock(items_to_restore)
             self.order.reduced_stock = False
             self.order.save(update_fields=["reduced_stock"])
             logger.warning(
@@ -199,10 +202,24 @@ class WebhookMidtrans:
         """
         if self.order.reduced_stock:
             return
-        for item in self.order.items.all():
-            product = item.product
+        
+        order_items = get_unrefunded_items(self.order)
+        if not order_items:
+            return
+        
+        product_ids = order_items.values_list("product_id", flat=True)
+        
+        products = (
+            Product.objects.select_for_update().filter(id__in=product_ids).order_by("id")
+        )
+        
+        product_map = {p.id: p for p in products}
+
+        for item in order_items:
+            product = product_map[item.product_id]
             product.reserved_stock -= item.qty
             product.save(update_fields=["reserved_stock"])
+            
 
     # def create_order_ro(self):
     #     try:

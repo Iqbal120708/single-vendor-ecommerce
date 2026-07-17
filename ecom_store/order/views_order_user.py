@@ -2,8 +2,8 @@ from rest_framework import status as rest_status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import OrderItem
-from .serializers import OrderItemSerializer, OrderSerializer
+from .models import OrderItem, RefundRequest
+from .serializers import OrderItemSerializer, OrderSerializer, RefundRequestDetailSerializer
 
 
 class GetOrderByFilter(APIView):
@@ -81,3 +81,16 @@ class GetOrderDetail(APIView):
 
         order_items.update(is_archived=True)
         return Response(status=rest_status.HTTP_204_NO_CONTENT)
+
+class RefundRequestByItemView(APIView):
+
+    def get(self, request, order_item_id):
+        refund_request = RefundRequest.objects.filter(
+            order_item_id=order_item_id,
+            order_item__order__user=request.user,
+        ).order_by("-requested_at").first()
+
+        if not refund_request:
+            return Response({"detail": "Belum ada refund request untuk item ini."}, status=404)
+
+        return Response(RefundRequestDetailSerializer(refund_request).data)
