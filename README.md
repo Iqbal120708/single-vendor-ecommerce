@@ -60,9 +60,9 @@ For a deeper walkthrough of the reservation pattern and the
 `select_for_update()` locking logic, see the dev.to article:
 [Preventing Overselling with Stock Reservation and select_for_update() in Django](https://dev.to/iqbal120708/preventing-overselling-with-stock-reservation-and-selectforupdate-in-django-3jam)
 
-→ `CheckoutService._validate_and_reserve_stock()` in
+- `CheckoutService._validate_and_reserve_stock()` in
   `order/services/checkout.py`
-→ `CheckoutView` in `order/views_order_process.py`
+- `CheckoutView` in `order/views_order_process.py`
 
 ### Shipping rates with automatic courier selection
 
@@ -92,9 +92,9 @@ shape) — each is distinguished separately, rather than one blanket
 `except Exception` that flattens every failure into one generic
 message.
 
-→ `fetch_shipping_rates_from_rajaongkir()`, `get_best_shipping()`,
+- `fetch_shipping_rates_from_rajaongkir()`, `get_best_shipping()`,
   `extract_min_etd()`, `get_active_shipping()` in `order/utils.py`
-→ `ShippingRates` in `order/views_order_process.py`
+- `ShippingRates` in `order/views_order_process.py`
 
 ### Transaction: separating database operations from external API calls
 
@@ -123,7 +123,7 @@ for internal failures (inside atomic), 502 specifically for Midtrans
 upstream failures (outside atomic) — so the client knows exactly
 which side failed.
 
-→ `TransactionView.post()` in `order/views_order_process.py`
+- `TransactionView.post()` in `order/views_order_process.py`
 
 ### Idempotent Midtrans webhook + stock reversal
 
@@ -164,12 +164,12 @@ stock correction), `reduce_product_stock()` still revalidates
 net, independent of the `reserved_stock` check already passed at
 checkout.
 
-→ `WebhookMidtrans` (validate_signature, get_order,
+- `WebhookMidtrans` (validate_signature, get_order,
   change_payment_status_order, reduce_stock, reverse_stock,
   release_reservation) in `order/services/midtrans.py`
-→ `reduce_product_stock()`, `restore_product_stock()` in
+- `reduce_product_stock()`, `restore_product_stock()` in
   `order/utils.py`
-→ `MidtransWebhookView` in `order/views_order_process.py`
+- `MidtransWebhookView` in `order/views_order_process.py`
 
 ```mermaid
 flowchart TD
@@ -202,17 +202,28 @@ flowchart TD
 
     E --> H{old_status == paid?}
     H -->|No, pending -> failed| H1{reduced_stock == True?}
-    H1 -->|No| H2[release_reservation<br/>frees reserved_stock]
     H1 -->|Yes| H3[No-op<br/>shouldn't happen in this path]
-    H2 --> R200E["200"]
-    H3 --> R200E
+    H3 --> R200E["200"]
+    H1 -->|No| H2Q{get_unrefunded_items result}
+    H2Q -->|none refunded yet| H2a[release_reservation<br/>for ALL items]
+    H2Q -->|some refunded via admin| H2b[release_reservation<br/>for REMAINING items only]
+    H2Q -->|all already refunded| H2c[No-op<br/>empty queryset,<br/>Product.select_for_update never called]
+    H2a --> R200E
+    H2b --> R200E
+    H2c --> R200E
 
     H -->|Yes, paid -> failed<br/>reversal| I{order.status in<br/>SHIPPED/DELIVERED?}
     I -->|Yes| I1[Stock NOT auto-restored<br/>logged as critical for manual review]
     I1 --> R200F["200"]
     I -->|No| I2{reverse_stock succeeds?}
     I2 -->|Fails| R500C["500<br/>(intentional, triggers Midtrans retry)"]
-    I2 -->|Succeeds| I3[reduced_stock set to False]
+    I2 -->|Succeeds| I2Q{get_unrefunded_items result}
+    I2Q -->|none refunded yet| I3a[restore_product_stock<br/>for ALL items]
+    I2Q -->|some refunded via admin| I3b[restore_product_stock<br/>for REMAINING items only]
+    I2Q -->|all already refunded| I3c[No-op<br/>nothing to restore]
+    I3a --> I3[reduced_stock set to False]
+    I3b --> I3
+    I3c --> I3
     I3 --> R200G["200"]
 
     style R400 fill:#6b2c2c,color:#fff
@@ -229,8 +240,12 @@ flowchart TD
     style R200F fill:#2d5f3f,color:#fff
     style R200G fill:#2d5f3f,color:#fff
     style G1 fill:#6b2c2c,color:#fff
-    style H2 fill:#3a3a5c,color:#fff
-    style I3 fill:#3a3a5c,color:#fff
+    style H2a fill:#3a3a5c,color:#fff
+    style H2b fill:#3a3a5c,color:#fff
+    style H2c fill:#3a3a5c,color:#fff
+    style I3a fill:#3a3a5c,color:#fff
+    style I3b fill:#3a3a5c,color:#fff
+    style I3c fill:#3a3a5c,color:#fff
     style I1 fill:#7a5c1e,color:#fff
 ```
 
@@ -248,6 +263,34 @@ the stock-reservation-release logic that took several attempts to
 get right.
 [Full story on the dev.to article](https://dev.to/iqbal120708/debugging-a-payment-webhook-how-i-caught-a-silent-failure-that-would-have-blocked-every-non-card-4dfi)
 
+### Refund: per-item requests instead of order-level cancellation
+
+`RefundRequest` is a FK to `OrderItem`, not a status on `Order` — so
+one product in an order can be refunded without cancelling every
+other product in the same order. Refunds are always sent manually to
+the customer's bank account/e-wallet rather than automatically
+through the Midtrans Refund API — some of this project's payment
+methods (`bank_transfer`, `cstore`, `echannel`) don't support
+automatic refunds at all.
+
+Because the webhook reversal and an admin-initiated refund can both
+process the same order almost at the same time (a realistic 1-5
+minute window), both paths share a single helper,
+`get_unrefunded_items()`, which excludes items whose stock has
+already been restored through the other path — preventing
+`reserved_stock`/`stock` from being adjusted twice for the same item.
+
+`complete()` — the step that actually restores stock — is validated
+through 4 guards before any execution, including rejecting the
+combination `payment_status=PAID` + `reduced_stock=False` as an
+anomalous state that needs admin review, rather than silently
+processing it.
+
+For the full design discussion (including the approaches that were
+rejected), see the dev.to article: [Behind RefundRequest: Designing Item-Level Refunds for a Single-Vendor E-commerce App](https://dev.to/iqbal120708/behind-refundrequest-designing-item-level-refunds-for-a-single-vendor-e-commerce-app-e3o)
+
+- `RefundRequest`, `RefundService` in `order/services/refund.py`
+
 ## Tech Stack
 
 - **Framework**: Django 5.2, Django REST Framework
@@ -255,6 +298,7 @@ get right.
 - **Auth**: dj-rest-auth + django-allauth, JWT (djangorestframework-simplejwt)
 - **Payment**: Midtrans (via `midtransclient`)
 - **Shipping**: RajaOngkir (direct REST API, no SDK)
+- **Task queue**: Celery + Redis (async email notifications for refund status changes)
 - **Other**: django-phonenumber-field (phone number validation), django-cors-headers
 
 
@@ -294,6 +338,9 @@ layer since their logic isn't as complex as the order module.
 - **View & track order status** — order list with status and
   payment-status filters, per-item order detail
 - **Product reviews** — comments with purchase verification
+- **Refund handling** — customer-initiated per-item refund/
+  cancellation requests, admin approval workflow via Django admin,
+  automatic stock restoration on completion
 - **Store, product, and order data managed through Django admin**
 
 ## How to run
@@ -382,20 +429,19 @@ this file focus on orchestration and response handling.
 This project is still under active development. Some things are
 deliberately left undone, not overlooked:
 
-- **Task queue (Celery + Redis)** — not in the stack yet (see Tech
-  Stack). Planned for concrete needs:
+- **Task queue (Celery + Redis)** — now set up and used for refund
+  status email notifications (see "Worth a Look"). Still planned:
   - **Cleaning up expired `reserved_stock`** — currently, if a
     checkout is abandoned before the session expires (10 minutes)
     and never reaches the Midtrans webhook, the `reserved_stock`
     already added is not automatically released. Plan: a periodic
     scheduled task that finds expired `CheckoutSession` records and
     calls `release_reservation()` for orders that were never paid.
-  - **Async email notifications** — currently there are no email
-    notifications beyond django-allauth's built-in registration
-    verification (synchronous). Plan: send email when order status
-    changes (paid, shipped, delivered) via a task queue, so the
-    Midtrans webhook request doesn't have to wait on the email
-    sending process.
+  - **Async email notifications for non-refund order status
+    changes** — paid/shipped/delivered notifications are still
+    synchronous (django-allauth's built-in registration
+    verification is the only other one); refund-related emails are
+    the only ones on the task queue so far.
 - **Admin endpoints for product, order, and store** — currently all
   admin operations (add/edit product, view all orders across
   users, manage store data) go entirely through Django admin, no
@@ -410,13 +456,4 @@ deliberately left undone, not overlooked:
   `settings.py`) but not yet enabled and not yet in
   `requirements.txt`.
 - **Translate logger messages and code comments to English** —
-  currently written in Indonesian; not yet updated.
-- **Refund handling** — not yet implemented. This is different from
-  the *reversal* case discussed in the [webhook article](https://dev.to/iqbal120708/debugging-a-payment-webhook-how-i-caught-a-silent-failure-that-would-have-blocked-every-non-card-4dfi):
-  reversal is triggered automatically by Midtrans/the payment
-  provider shortly after settlement, while refund would be a
-  manually initiated flow (e.g. admin approves a return, or a
-  customer requests cancellation after delivery). Currently there's
-  no endpoint or logic for admin-initiated or customer-initiated
-  refunds — payment_status only moves through the states already
-  described in the article.
+currently written in Indonesian; not yet updated.
